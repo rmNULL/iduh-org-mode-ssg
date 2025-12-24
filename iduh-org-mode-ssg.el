@@ -31,6 +31,8 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'org-element)
+(require 'ox)
 
 ;;; ============================================================================
 ;;; Configuration
@@ -77,6 +79,11 @@
   :type 'string
   :group 'iduh-org-mode-ssg)
 
+(defcustom iduh-org-ssg-base-template nil
+  "Path to base HTML template file, or nil to use built-in default."
+  :type '(choice (const nil) string)
+  :group 'iduh-org-mode-ssg)
+
 (defcustom iduh-org-ssg-header-template nil
   "Path to header HTML template file, or nil to disable."
   :type '(choice (const nil) string)
@@ -101,206 +108,150 @@
   (signal type (list (apply #'format message args))))
 
 ;;; ============================================================================
-;;; Parsing Functions
+;;; AST Parsing Functions
 ;;; ============================================================================
 
 (defun iduh-org-mode-ssg--parse-file (filepath)
-  "Parse an Org file at FILEPATH and return a structured document.
-Returns a plist with :title, :subtitle, and :sections."
+  "Parse an Org file at FILEPATH using org-element AST.
+Returns a plist with :title, :subtitle, :date, :author, :description, and :sections."
   (with-temp-buffer
     (insert-file-contents filepath)
+    (org-mode)
     (iduh-org-mode-ssg--parse-buffer)))
 
+(defun iduh-org-mode-ssg--get-keyword (ast keyword)
+  "Extract KEYWORD value from AST."
+  (org-element-map ast 'keyword
+    (lambda (kw)
+      (when (string= (upcase (org-element-property :key kw)) (upcase keyword))
+        (org-element-property :value kw)))
+    nil t))
+
 (defun iduh-org-mode-ssg--parse-buffer ()
-  "Parse the current buffer and return a structured document."
-  (let ((title nil)
-        (subtitle nil)
-        (date nil)
-        (author nil)
-        (description nil)
-        (sections '())
-        (current-section nil)
-        (current-content '())
-        (in-quote nil)
-        (quote-content '())
-        (line-number 0))
+  "Parse the current buffer using org-element AST and return a structured document."
+  (let* ((ast (org-element-parse-buffer))
+         (title (iduh-org-mode-ssg--get-keyword ast "TITLE"))
+         (subtitle (iduh-org-mode-ssg--get-keyword ast "SUBTITLE"))
+         (date (iduh-org-mode-ssg--get-keyword ast "DATE"))
+         (author (iduh-org-mode-ssg--get-keyword ast "AUTHOR"))
+         (description (iduh-org-mode-ssg--get-keyword ast "DESCRIPTION"))
+         ;; Extract only level 1 headlines
+         (sections (org-element-map ast 'headline
+                     (lambda (headline)
+                       (when (= (org-element-property :level headline) 1)
+                         (list :heading (org-element-property :title headline)
+                               :content (iduh-org-mode-ssg--parse-section-content headline)))))))
     
-    (goto-char (point-min))
+    (setq sections (delq nil sections))
     
-    (while (not (eobp))
-      (let ((line (buffer-substring-no-properties
-                   (line-beginning-position)
-                   (line-end-position))))
-        (setq line-number (1+ line-number))
-        
-        (cond
-         ;; Check for sub-headings first (ERROR condition)
-         ((string-match "^\\*\\*+[ \t]+" line)
+    (org-element-map ast 'headline
+      (lambda (headline)
+        (when (> (org-element-property :level headline) 1)
           (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-subheading-error
-                          "Sub-headings are not allowed (line %d): %s"
-                          line-number line))
-         
-         ;; Title
-         ((string-match "^#\\+TITLE:[ \t]*\\(.+\\)$" line)
-          (setq title (match-string 1 line)))
-         
-         ;; Subtitle
-         ((string-match "^#\\+SUBTITLE:[ \t]*\\(.+\\)$" line)
-          (setq subtitle (match-string 1 line)))
-         
-         ;; Date (mandatory)
-         ((string-match "^#\\+DATE:[ \t]*\\(.+\\)$" line)
-          (setq date (string-trim (match-string 1 line))))
-         
-         ;; Author
-         ((string-match "^#\\+AUTHOR:[ \t]*\\(.+\\)$" line)
-          (setq author (match-string 1 line)))
-         
-         ;; Description (for meta tag)
-         ((string-match "^#\\+DESCRIPTION:[ \t]*\\(.+\\)$" line)
-          (setq description (match-string 1 line)))
-         
-         ;; Begin quote
-         ((string-match "^#\\+BEGIN_QUOTE[ \t]*$" line)
-          (setq in-quote t)
-          (setq quote-content '()))
-         
-         ;; End quote
-         ((string-match "^#\\+END_QUOTE[ \t]*$" line)
-          (when in-quote
-            (push (list :type 'quote :content (nreverse quote-content)) current-content)
-            (setq in-quote nil)
-            (setq quote-content '())))
-         
-         ;; Inside quote - collect lines
-         (in-quote
-          (push line quote-content))
-         
-         ;; Section heading (single *)
-         ((string-match "^\\*[ \t]+\\(.+\\)$" line)
-          ;; Save previous section if exists
-          (when current-section
-            (push (list :heading current-section
-                        :content (nreverse current-content))
-                  sections))
-          ;; Start new section
-          (setq current-section (match-string 1 line))
-          (setq current-content '()))
-         
-         ;; Image link with mandatory alt text
-         ((string-match "^[ \t]*\\[\\[\\([^]]+\\)\\]\\[\\([^]]+\\)\\]\\][ \t]*$" line)
-          (let ((src (match-string 1 line))
-                (alt (match-string 2 line)))
-            (push (list :type 'image :src src :alt alt) current-content)))
-         
-         ;; Image link without alt text (ERROR)
-         ((string-match "^[ \t]*\\[\\[\\([^]]+\\)\\]\\][ \t]*$" line)
-          (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-image-error
-                          "Image must have alt text (line %d): %s\nUse: [[image.png][Alt text description]]"
-                          line-number line))
-         
-         ;; Skip other org directives
-         ((string-match "^#\\+" line)
-          nil)
-         
-         ;; Empty line
-         ((string-match "^[ \t]*$" line)
-          nil)
-         
-         ;; Regular paragraph text
-         (t
-          (let ((trimmed (string-trim line)))
-            (when (> (length trimmed) 0)
-              (push (list :type 'paragraph :text trimmed) current-content))))))
-      
-      (forward-line 1))
-    
-    ;; Save the last section
-    (when current-section
-      (push (list :heading current-section
-                  :content (nreverse current-content))
-            sections))
-    
-    ;; Check for unclosed quote
-    (when in-quote
-      (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-parse-error
-                      "Unclosed quote block (missing #+END_QUOTE)"))
-    
+                                    "Sub-headings are not allowed: %s"
+                                    (org-element-property :raw-value headline)))))
+
     (list :title title
           :subtitle subtitle
           :date date
           :author author
           :description description
-          :sections (nreverse sections))))
+          :sections sections)))
+
+(defun iduh-org-mode-ssg--parse-section-content (headline)
+  "Parse the content of a HEADLINE element and return a list of content items."
+  (let* ((section (org-element-map headline 'section #'identity nil t))
+         (elements (and section (org-element-contents section)))
+         (items '()))
+    (dolist (element elements)
+      (let ((type (org-element-type element)))
+        (cond
+         ;; Paragraph
+         ((eq type 'paragraph)
+          (let* ((contents (org-element-contents element))
+                 (first-child (car contents)))
+            (if (and (= (length contents) 1)
+                     (eq (org-element-type first-child) 'link)
+                     (string= (org-element-property :type first-child) "file"))
+                (let ((src (org-element-property :path first-child))
+                      (alt (org-element-interpret-data (org-element-contents first-child))))
+                  (if (and alt (> (length (string-trim alt)) 0))
+                      (push (list :type 'image :src src :alt (string-trim alt)) items)
+                    (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-image-error
+                                              "Image must have alt text: [[%s]]" src)))
+              (push (list :type 'paragraph :content contents) items))))
+         
+         ;; Quote block
+         ((eq type 'quote-block)
+          (let ((quote-lines '()))
+            (dolist (child (org-element-contents element))
+              (when (eq (org-element-type child) 'paragraph)
+                (push (org-element-contents child) quote-lines)))
+            (push (list :type 'quote :content (nreverse quote-lines)) items)))
+
+         ;; List
+         ((eq type 'plain-list)
+          (let ((list-items '()))
+            (dolist (child (org-element-contents element))
+              (when (eq (org-element-type child) 'item)
+                (push (org-element-contents (car (org-element-contents child)))
+                      list-items)))
+            (push (list :type 'list :content (nreverse list-items)) items))))))
+    (nreverse items)))
 
 ;;; ============================================================================
 ;;; Inline Formatting
 ;;; ============================================================================
 
-(defun iduh-org-mode-ssg--format-inline (text)
-  "Convert inline Org formatting in TEXT to HTML spans with CSS classes.
-Supports *bold*, /italic/, _underline_, and +strikethrough+.
-Uses placeholders to avoid regex conflicts when multiple formats are adjacent."
-  (let ((result text))
-    ;; Use placeholder tokens that contain NO formatting chars (*, /, _, +)
-    ;; Process italic FIRST since its marker / appears in closing tags
-    
-    ;; Italic: /text/ - be careful not to match URLs or paths
-    ;; Must process before others since "/" could appear in placeholders
-    (setq result
-          (replace-regexp-in-string
-           "\\([^:]\\)/\\([^/\n]+?\\)/"
-           "\\1~OSSI~\\2~OSSIe~"
-           result))
-    ;; Handle italic at start of string
-    (when (string-match "^/\\([^/\n]+?\\)/" result)
-      (setq result
-            (replace-regexp-in-string
-             "^/\\([^/\n]+?\\)/"
-             "~OSSI~\\1~OSSIe~"
-             result)))
-    
-    ;; Bold: *text*
-    (setq result
-          (replace-regexp-in-string
-           "\\*\\([^*\n]+?\\)\\*"
-           "~OSSB~\\1~OSSBe~"
-           result))
-    
-    ;; Underline: _text_
-    (setq result
-          (replace-regexp-in-string
-           "_\\([^_\n]+?\\)_"
-           "~OSSU~\\1~OSSUe~"
-           result))
-    
-    ;; Strikethrough: +text+
-    (setq result
-          (replace-regexp-in-string
-           "\\+\\([^+\n]+?\\)\\+"
-           "~OSSS~\\1~OSSSe~"
-           result))
-    
-    ;; Now convert placeholders to actual HTML
-    (setq result (replace-regexp-in-string "~OSSB~" "<span class=\"bold\">" result t t))
-    (setq result (replace-regexp-in-string "~OSSBe~" "</span>" result t t))
-    (setq result (replace-regexp-in-string "~OSSI~" "<span class=\"italic\">" result t t))
-    (setq result (replace-regexp-in-string "~OSSIe~" "</span>" result t t))
-    (setq result (replace-regexp-in-string "~OSSU~" "<span class=\"underline\">" result t t))
-    (setq result (replace-regexp-in-string "~OSSUe~" "</span>" result t t))
-    (setq result (replace-regexp-in-string "~OSSS~" "<span class=\"strikethrough\">" result t t))
-    (setq result (replace-regexp-in-string "~OSSSe~" "</span>" result t t))
-    
-    result))
+;;; ============================================================================
+;;; AST Rendering (No Regex Magic)
+;;; ============================================================================
+
+(defun iduh-org-mode-ssg--render-ast (data)
+  "Convert AST DATA (element, object, or list) to HTML string without regex."
+  (cond
+   ((null data) "")
+   ((stringp data) (iduh-org-mode-ssg--escape-html data))
+   ((listp (car-safe data)) (mapconcat #'iduh-org-mode-ssg--render-ast data ""))
+   ((and (listp data) (not (symbolp (car data)))) (mapconcat #'iduh-org-mode-ssg--render-ast data ""))
+   (t
+    (let* ((type (org-element-type data))
+           (contents (org-element-contents data))
+           (post-blank (or (org-element-property :post-blank data) 0))
+           (blank-str (make-string post-blank ?\s))
+           (html-content
+            (pcase type
+              ('bold (concat "<span class=\"bold\">" (iduh-org-mode-ssg--render-ast contents) "</span>"))
+              ('italic (concat "<span class=\"italic\">" (iduh-org-mode-ssg--render-ast contents) "</span>"))
+              ('underline (concat "<span class=\"underline\">" (iduh-org-mode-ssg--render-ast contents) "</span>"))
+              ('strike-through (concat "<span class=\"strikethrough\">" (iduh-org-mode-ssg--render-ast contents) "</span>"))
+              ('code (concat "<code>" (iduh-org-mode-ssg--escape-html (org-element-property :value data)) "</code>"))
+              ('verbatim (concat "<code>" (iduh-org-mode-ssg--escape-html (org-element-property :value data)) "</code>"))
+              ('link 
+               (let ((link-type (org-element-property :type data))
+                     (path (org-element-property :path data)))
+                 (if (string= link-type "file")
+                     (if (and contents (> (length contents) 0))
+                         (concat "<a href=\"" (iduh-org-mode-ssg--escape-html path) "\">" (iduh-org-mode-ssg--render-ast contents) "</a>")
+                       (iduh-org-mode-ssg--escape-html path))
+                   (concat "<a href=\"" (org-element-property :raw-link data) "\">" 
+                           (if (and contents (> (length contents) 0))
+                               (iduh-org-mode-ssg--render-ast contents)
+                             (org-element-property :raw-link data))
+                           "</a>"))))
+              (_ (iduh-org-mode-ssg--render-ast contents)))))
+      (concat html-content blank-str)))))
 
 (defun iduh-org-mode-ssg--escape-html (text)
   "Escape HTML special characters in TEXT."
-  (let ((result text))
-    (setq result (replace-regexp-in-string "&" "&amp;" result))
-    (setq result (replace-regexp-in-string "<" "&lt;" result))
-    (setq result (replace-regexp-in-string ">" "&gt;" result))
-    (setq result (replace-regexp-in-string "\"" "&quot;" result))
-    result))
+  (if (not (stringp text))
+      ""
+    (let ((result text))
+      (setq result (replace-regexp-in-string "&" "&amp;" result))
+      (setq result (replace-regexp-in-string "<" "&lt;" result))
+      (setq result (replace-regexp-in-string ">" "&gt;" result))
+      (setq result (replace-regexp-in-string "\"" "&quot;" result))
+      result)))
 
 ;;; ============================================================================
 ;;; Date Formatting
@@ -334,18 +285,14 @@ DATE-STRING should be in YYYY-MM-DD format."
       (insert-file-contents template-path)
       (buffer-string))))
 
-(defun iduh-org-mode-ssg--process-template (template doc)
-  "Process TEMPLATE string, replacing placeholders with values from DOC.
-Supported placeholders: {{title}}, {{date}}, {{author}}, {{year}}."
+(defun iduh-org-mode-ssg--process-template (template replacements)
+  "Process TEMPLATE string, replacing placeholders with values from REPLACEMENTS plist.
+Placeholders should be in the format {{key}}."
   (when template
-    (let ((result template)
-          (title (or (plist-get doc :title) ""))
-          (date (or (plist-get doc :date) ""))
-          (author (or (plist-get doc :author) "")))
-      (setq result (replace-regexp-in-string "{{title}}" title result t t))
-      (setq result (replace-regexp-in-string "{{date}}" date result t t))
-      (setq result (replace-regexp-in-string "{{author}}" author result t t))
-      (setq result (replace-regexp-in-string "{{year}}" (format-time-string "%Y") result t t))
+    (let ((result template))
+      (cl-loop for (key value) on replacements by #'cddr
+               do (let ((placeholder (format "{{%s}}" (substring (symbol-name key) 1))))
+                    (setq result (replace-regexp-in-string placeholder (or (format "%s" (or value "")) "") result t t))))
       result)))
 
 ;;; ============================================================================
@@ -355,57 +302,82 @@ Supported placeholders: {{title}}, {{date}}, {{author}}, {{year}}."
 (defun iduh-org-mode-ssg--generate-html (doc css-path &optional header-template footer-template)
   "Generate HTML string from parsed document DOC, linking to CSS-PATH.
 Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
-  (let ((title (or (plist-get doc :title) "Untitled"))
-        (subtitle (plist-get doc :subtitle))
-        (date (plist-get doc :date))
-        (description (plist-get doc :description))
-        (sections (plist-get doc :sections))
-        (processed-header (iduh-org-mode-ssg--process-template header-template doc))
-        (processed-footer (iduh-org-mode-ssg--process-template footer-template doc)))
-    (concat
-     ;; DOCTYPE and HTML opening
-     "<!DOCTYPE html>\n"
-     "<html lang=\"" iduh-org-mode-ssg-default-lang "\">\n"
-     "<head>\n"
-     "  <meta charset=\"UTF-8\">\n"
-     "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
-     "  <title>" (iduh-org-mode-ssg--escape-html title) "</title>\n"
-     "  <meta name=\"generator\" content=\"iduh-org-mode-ssg\">\n"
-     (when date
-       (concat "  <meta name=\"date\" content=\"" (iduh-org-mode-ssg--escape-html date) "\">\n"))
-     (when description
-       (concat "  <meta name=\"description\" content=\"" (iduh-org-mode-ssg--escape-html description) "\">\n"))
-     "  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
-     "  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
-     "  <link href=\"" iduh-org-mode-ssg-google-fonts-url "\" rel=\"stylesheet\">\n"
-     "  <link rel=\"stylesheet\" href=\"" css-path "\">\n"
-     "</head>\n"
-     "<body>\n"
-     ;; Optional header template
-     (when processed-header
-       (concat processed-header "\n"))
-     "  <article>\n"
-     ;; Header with title, subtitle, and date
-     "    <header>\n"
-     "      <h1 class=\"title\">" (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html title)) "</h1>\n"
-     (if subtitle
-         (concat "      <p class=\"subtitle\">"
-                 (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html subtitle))
-                 "</p>\n")
-       "")
-     (when date
-       (concat "      <time class=\"published-date\" datetime=\"" date "\">"
-               (iduh-org-mode-ssg--format-date date)
-               "</time>\n"))
-     "    </header>\n"
-     ;; Sections
-     (mapconcat #'iduh-org-mode-ssg--generate-section sections "\n")
-     "\n  </article>\n"
-     ;; Optional footer template
-     (when processed-footer
-       (concat processed-footer "\n"))
-     "</body>\n"
-     "</html>\n")))
+  (let* ((title (or (plist-get doc :title) "Untitled"))
+         (subtitle (plist-get doc :subtitle))
+         (date (plist-get doc :date))
+         (description (plist-get doc :description))
+         (sections (plist-get doc :sections))
+         (author (or (plist-get doc :author) ""))
+         ;; Base replacements for templates
+         (replacements (list :title (string-trim (iduh-org-mode-ssg--render-ast title))
+                             :date (iduh-org-mode-ssg--escape-html date)
+                             :author author
+                             :year (format-time-string "%Y")))
+         (processed-header (iduh-org-mode-ssg--process-template header-template replacements))
+         (processed-footer (iduh-org-mode-ssg--process-template footer-template replacements))
+         (base-template-str (or (iduh-org-mode-ssg--load-template iduh-org-ssg-base-template)
+                                (iduh-org-mode-ssg--load-template (expand-file-name "base.html" iduh-org-ssg-templates-directory))
+                                iduh--default-base-template))
+         
+         (meta (concat (when date
+                         (concat "  <meta name=\"date\" content=\"" (iduh-org-mode-ssg--escape-html date) "\">\n"))
+                       (when description
+                         (concat "  <meta name=\"description\" content=\"" (iduh-org-mode-ssg--escape-html description) "\">\n"))))
+         
+         (formatted-subtitle (if subtitle
+                                 (concat "<p class=\"subtitle\">"
+                                         (string-trim (iduh-org-mode-ssg--render-ast subtitle))
+                                         "</p>")
+                               ""))
+         (formatted-date (if date
+                             (concat "<time class=\"published-date\" datetime=\"" (iduh-org-mode-ssg--escape-html date) "\">"
+                                     (iduh-org-mode-ssg--format-date date)
+                                     "</time>")
+                           ""))
+         (content (mapconcat #'iduh-org-mode-ssg--generate-section sections "\n"))
+         
+         (all-replacements (append replacements
+                                   (list :lang iduh-org-mode-ssg-default-lang
+                                         :meta (string-trim meta)
+                                         :google_fonts_url iduh-org-mode-ssg-google-fonts-url
+                                         :css_path css-path
+                                         :header (or (and processed-header (string-trim processed-header)) "")
+                                         :formatted_title (string-trim (iduh-org-mode-ssg--render-ast title))
+                                         :formatted_subtitle formatted-subtitle
+                                         :formatted_date formatted-date
+                                         :content (string-trim content)
+                                         :footer (or (and processed-footer (string-trim processed-footer)) "")))))
+    (iduh-org-mode-ssg--process-template base-template-str all-replacements)))
+
+(defconst iduh--default-base-template
+  "<!DOCTYPE html>
+<html lang=\"{{lang}}\">
+<head>
+  <meta charset=\"UTF-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+  <title>{{title}}</title>
+  <meta name=\"generator\" content=\"iduh-org-mode-ssg\">
+  {{meta}}
+  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">
+  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
+  <link href=\"{{google_fonts_url}}\" rel=\"stylesheet\">
+  <link rel=\"stylesheet\" href=\"{{css_path}}\">
+</head>
+<body>
+  {{header}}
+  <article>
+    <header>
+      <h1 class=\"title\">{{formatted_title}}</h1>
+      {{formatted_subtitle}}
+      {{formatted_date}}
+    </header>
+    {{content}}
+  </article>
+  {{footer}}
+</body>
+</html>"
+  "Default base HTML template.")
+
 
 (defun iduh-org-mode-ssg--generate-section (section)
   "Generate HTML for a SECTION."
@@ -413,7 +385,7 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
         (content (plist-get section :content)))
     (concat
      "    <section>\n"
-     "      <h2>" (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html heading)) "</h2>\n"
+     "      <h2>" (string-trim (iduh-org-mode-ssg--render-ast heading)) "</h2>\n"
      (mapconcat #'iduh-org-mode-ssg--generate-content content "")
      "    </section>")))
 
@@ -422,9 +394,7 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
   (let ((type (plist-get item :type)))
     (pcase type
       ('paragraph
-       (concat "      <p>"
-               (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html (plist-get item :text)))
-               "</p>\n"))
+       (concat "      <p>" (string-trim (iduh-org-mode-ssg--render-ast (plist-get item :content))) "</p>\n"))
       ('image
        (let ((src (plist-get item :src))
              (alt (plist-get item :alt)))
@@ -434,19 +404,26 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
                  "        <figcaption>" (iduh-org-mode-ssg--escape-html alt) "</figcaption>\n"
                  "      </figure>\n")))
       ('quote
-       (let ((lines (plist-get item :content)))
+       (let ((contents (plist-get item :content)))
          (concat "      <blockquote>\n"
                  (mapconcat
-                  (lambda (line)
-                    (let ((trimmed (string-trim line)))
-                      (if (> (length trimmed) 0)
-                          (concat "        <p>"
-                                  (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html trimmed))
-                                  "</p>\n")
+                  (lambda (content)
+                    (let ((rendered (string-trim (iduh-org-mode-ssg--render-ast content))))
+                      (if (> (length rendered) 0)
+                          (concat "        <p>" rendered "</p>\n")
                         "")))
-                  lines "")
+                  contents "")
                  "      </blockquote>\n")))
+      ('list
+       (let ((items (plist-get item :content)))
+         (concat "      <ul>\n"
+                 (mapconcat
+                  (lambda (li)
+                    (concat "        <li>" (string-trim (iduh-org-mode-ssg--render-ast li)) "</li>\n"))
+                  items "")
+                 "      </ul>\n")))
       (_ ""))))
+
 
 ;;; ============================================================================
 ;;; Public API
