@@ -4,7 +4,7 @@
 EMACS = emacs
 LIB = iduh-org-mode-ssg.el
 PUBLIC_DIR = public
-POSTS_DIR = posts
+POSTS_DIR = tests/posts
 PORT = 8000
 
 # Default target
@@ -42,3 +42,4 @@ help:
 	@echo "  make clean  - Remove all generated files in /public"
 	@echo "  make serve  - Build and start a local web server for preview"
 	@echo "  make help   - Show this help message"
+
