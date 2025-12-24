@@ -103,6 +103,69 @@
 (define-error 'iduh-org-mode-ssg-image-error "Image syntax error" 'iduh-org-mode-ssg-error)
 (define-error 'iduh-org-mode-ssg-parse-error "Parse error" 'iduh-org-mode-ssg-error)
 
+(defvar iduh-org-ssg--current-input-file nil
+  "Path to the Org file currently being processed.")
+
+(defvar iduh-org-ssg--current-output-dir nil
+  "Path to the output directory for the current build.")
+
+(defvar iduh-org-ssg--current-post-slug nil
+  "Slug of the post currently being processed.")
+
+(defvar iduh-org-ssg--image-extensions
+  '("jpg" "jpeg" "png" "gif" "svg" "webp" "bmp" "tiff")
+  "List of file extensions considered to be images.")
+
+(defun iduh-org-ssg--image-p (path)
+  "Return t if PATH points to an image file based on its extension."
+  (let ((ext (downcase (file-name-extension path))))
+    (member ext iduh-org-ssg--image-extensions)))
+
+(defun iduh-org-ssg--slugify (title)
+  "Convert TITLE to a URL-friendly slug for use as filename.
+E.g., 'My First Post' becomes 'my-first-post'."
+  (let ((slug (downcase title)))
+    ;; Replace spaces and underscores with hyphens
+    (setq slug (replace-regexp-in-string "[ _]+" "-" slug))
+    ;; Remove non-alphanumeric characters except hyphens
+    (setq slug (replace-regexp-in-string "[^a-z0-9-]" "" slug))
+    ;; Remove multiple consecutive hyphens
+    (setq slug (replace-regexp-in-string "-+" "-" slug))
+    ;; Remove leading/trailing hyphens
+    (setq slug (replace-regexp-in-string "^-\\|-$" "" slug))
+    slug))
+
+(defun iduh-org-ssg--handle-file-link (path)
+  "Handle a file: link PATH.
+If it's an Org file in the same directory, link to its generated HTML.
+If it's an Org file elsewhere or any other file, copy it to post-assets."
+  (if (or (not iduh-org-ssg--current-post-slug)
+          (not iduh-org-ssg--current-input-file))
+      path
+    (let* ((input-dir (file-name-as-directory (file-name-directory (expand-file-name iduh-org-ssg--current-input-file))))
+           (src-file (expand-file-name path input-dir))
+           (is-org (string-suffix-p ".org" path))
+           (in-same-dir (string= (file-name-directory (expand-file-name src-file)) input-dir)))
+      (if (and is-org in-same-dir)
+          (if (file-exists-p src-file)
+              (let* ((linked-doc (iduh-org-mode-ssg--parse-file src-file))
+                     (linked-title (plist-get linked-doc :title)))
+                (concat (iduh-org-ssg--slugify (or linked-title (file-name-base src-file))) ".html"))
+            path)
+        ;; Copy to assets/post_resources/<post_id>/
+        (let* ((filename (file-name-nondirectory src-file))
+               (assets-rel-dir (concat "assets/post_resources/" iduh-org-ssg--current-post-slug "/"))
+               (dest-dir (expand-file-name assets-rel-dir (or iduh-org-ssg--current-output-dir iduh-org-ssg-output-directory)))
+               (dest-file (expand-file-name filename dest-dir))
+               (web-link (concat assets-rel-dir filename)))
+          (if (file-exists-p src-file)
+              (progn
+                (unless (file-directory-p dest-dir)
+                  (make-directory dest-dir t))
+                (copy-file src-file dest-file t)
+                web-link)
+            path))))))
+
 (defun iduh-org-mode-ssg--error (type message &rest args)
   "Signal an iduh-org-mode-ssg error of TYPE with MESSAGE formatted with ARGS."
   (signal type (list (apply #'format message args))))
@@ -131,6 +194,11 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
   "Parse the current buffer using org-element AST and return a structured document."
   (let* ((ast (org-element-parse-buffer))
          (title (iduh-org-mode-ssg--get-keyword ast "TITLE"))
+         (iduh-org-ssg--current-post-slug (if title
+                                             (iduh-org-ssg--slugify title)
+                                           (if iduh-org-ssg--current-input-file
+                                               (file-name-base iduh-org-ssg--current-input-file)
+                                             "untitled")))
          (subtitle (iduh-org-mode-ssg--get-keyword ast "SUBTITLE"))
          (date (iduh-org-mode-ssg--get-keyword ast "DATE"))
          (author (iduh-org-mode-ssg--get-keyword ast "AUTHOR"))
@@ -172,8 +240,9 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
                  (first-child (car contents)))
             (if (and (= (length contents) 1)
                      (eq (org-element-type first-child) 'link)
-                     (string= (org-element-property :type first-child) "file"))
-                (let ((src (org-element-property :path first-child))
+                     (string= (org-element-property :type first-child) "file")
+                     (iduh-org-ssg--image-p (org-element-property :path first-child)))
+                (let ((src (iduh-org-ssg--handle-file-link (org-element-property :path first-child)))
                       (alt (org-element-interpret-data (org-element-contents first-child))))
                   (if (and alt (> (length (string-trim alt)) 0))
                       (push (list :type 'image :src src :alt (string-trim alt)) items)
@@ -231,9 +300,32 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
                (let ((link-type (org-element-property :type data))
                      (path (org-element-property :path data)))
                  (if (string= link-type "file")
-                     (if (and contents (> (length contents) 0))
-                         (concat "<a href=\"" (iduh-org-mode-ssg--escape-html path) "\">" (iduh-org-mode-ssg--render-ast contents) "</a>")
-                       (iduh-org-mode-ssg--escape-html path))
+                     (let* ((is-org (string-suffix-p ".org" path))
+                            (is-image (iduh-org-ssg--image-p path))
+                            (input-dir (and iduh-org-ssg--current-input-file 
+                                            (file-name-as-directory (file-name-directory (expand-file-name iduh-org-ssg--current-input-file)))))
+                            (src-file (and input-dir (expand-file-name path input-dir)))
+                            (in-same-dir (and src-file input-dir (string= (file-name-directory (expand-file-name src-file)) input-dir)))
+                            (final-path (iduh-org-ssg--handle-file-link path))
+                            (rendered-contents (if (and contents (> (length contents) 0))
+                                                  (iduh-org-mode-ssg--render-ast contents)
+                                                "")))
+                       (cond
+                        (is-image
+                         (concat "<img src=\"" (iduh-org-mode-ssg--escape-html final-path) "\" alt=\"" 
+                                 (if (> (length rendered-contents) 0)
+                                     rendered-contents
+                                   (iduh-org-mode-ssg--escape-html (file-name-nondirectory path)))
+                                 "\">"))
+                        (t
+                         (let ((label (if (> (length rendered-contents) 0)
+                                          rendered-contents
+                                        (if (and is-org in-same-dir (file-exists-p src-file))
+                                            (let* ((linked-doc (iduh-org-mode-ssg--parse-file src-file))
+                                                   (linked-title (plist-get linked-doc :title)))
+                                              (iduh-org-mode-ssg--escape-html (or linked-title (file-name-base src-file))))
+                                          (iduh-org-mode-ssg--escape-html path)))))
+                           (concat "<a href=\"" (iduh-org-mode-ssg--escape-html final-path) "\">" label "</a>")))))
                    (concat "<a href=\"" (org-element-property :raw-link data) "\">" 
                            (if (and contents (> (length contents) 0))
                                (iduh-org-mode-ssg--render-ast contents)
@@ -429,19 +521,6 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
 ;;; Public API
 ;;; ============================================================================
 
-(defun iduh-org-ssg--slugify (title)
-  "Convert TITLE to a URL-friendly slug for use as filename.
-E.g., 'My First Post' becomes 'my-first-post'."
-  (let ((slug (downcase title)))
-    ;; Replace spaces and underscores with hyphens
-    (setq slug (replace-regexp-in-string "[ _]+" "-" slug))
-    ;; Remove non-alphanumeric characters except hyphens
-    (setq slug (replace-regexp-in-string "[^a-z0-9-]" "" slug))
-    ;; Remove multiple consecutive hyphens
-    (setq slug (replace-regexp-in-string "-+" "-" slug))
-    ;; Remove leading/trailing hyphens
-    (setq slug (replace-regexp-in-string "^-\\|-$" "" slug))
-    slug))
 
 (defun iduh-org-ssg--copy-directory-contents (src-dir dest-dir)
   "Recursively copy contents of SRC-DIR to DEST-DIR."
@@ -473,7 +552,11 @@ CSS-PATH is the path to the stylesheet (relative to the output HTML)."
   (unless (file-exists-p input-file)
     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-error "Input file does not exist: %s" input-file))
   
-  (let* ((doc (iduh-org-mode-ssg--parse-file input-file))
+  (let* ((iduh-org-ssg--current-input-file input-file)
+         (iduh-org-ssg--current-output-dir (file-name-directory output-file))
+         (doc (iduh-org-mode-ssg--parse-file input-file))
+         (iduh-org-ssg--current-post-slug (iduh-org-ssg--slugify (or (plist-get doc :title) 
+                                                                    (file-name-base input-file))))
          (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
          (footer-template (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template))
          (html (iduh-org-mode-ssg--generate-html doc css-path header-template footer-template)))
@@ -505,11 +588,15 @@ Returns the path to the generated HTML file."
   (unless (file-directory-p output-dir)
     (make-directory output-dir t))
   
-  (let* ((doc (iduh-org-mode-ssg--parse-file input-file))
+  (let* ((iduh-org-ssg--current-input-file input-file)
+         (iduh-org-ssg--current-output-dir output-dir)
+         (doc (iduh-org-mode-ssg--parse-file input-file))
+         (iduh-org-ssg--current-post-slug (iduh-org-ssg--slugify (or (plist-get doc :title) 
+                                                                    (file-name-base input-file))))
          (title (plist-get doc :title))
          (date (plist-get doc :date))
          (output-filename (if title
-                              (concat (iduh-org-ssg--slugify title) ".html")
+                              (concat iduh-org-ssg--current-post-slug ".html")
                             (concat (file-name-base input-file) ".html")))
          (output-file (expand-file-name output-filename output-dir))
          (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
