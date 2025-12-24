@@ -8,6 +8,7 @@ Thumbs.db
 !.gitignore
 !iduh-org-mode-ssg.el
 !README.md
+!todo.md
 !LICENSE
 !static/
 !templates/
