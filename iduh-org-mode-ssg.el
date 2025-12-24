@@ -94,6 +94,11 @@
   :type '(choice (const nil) string)
   :group 'iduh-org-mode-ssg)
 
+(defcustom iduh-org-ssg-logo-path "asset/site-logo.svg"
+  "Path to the site logo relative to the output directory."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
 ;;; ============================================================================
 ;;; Error Handling
 ;;; ============================================================================
@@ -409,6 +414,7 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
          (replacements (list :title (string-trim (iduh-org-mode-ssg--render-ast title))
                              :date (iduh-org-mode-ssg--escape-html date)
                              :author author
+                             :logo_path iduh-org-ssg-logo-path
                              :year (format-time-string "%Y")))
          (processed-header (iduh-org-mode-ssg--process-template header-template replacements))
          (processed-footer (iduh-org-mode-ssg--process-template footer-template replacements))
@@ -425,7 +431,7 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
                                  (concat "<p class=\"subtitle\">"
                                          (string-trim (iduh-org-mode-ssg--render-ast subtitle))
                                          "</p>")
-                               ""))
+                                ""))
          (formatted-date (if date
                              (concat "<time class=\"published-date\" datetime=\"" (iduh-org-mode-ssg--escape-html date) "\">"
                                      (iduh-org-mode-ssg--format-date date)
@@ -564,9 +570,11 @@ CSS-PATH is the path to the stylesheet (relative to the output HTML)."
          (doc (iduh-org-mode-ssg--parse-file input-file))
          (iduh-org-ssg--current-post-slug (iduh-org-ssg--slugify (or (plist-get doc :title) 
                                                                     (file-name-base input-file))))
-         (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
-         (footer-template (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template))
-         (html (iduh-org-mode-ssg--generate-html doc css-path header-template footer-template)))
+     (header-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template)
+                          (iduh-org-mode-ssg--load-template (expand-file-name "header.html" iduh-org-ssg-templates-directory))))
+     (footer-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template)
+                          (iduh-org-mode-ssg--load-template (expand-file-name "footer.html" iduh-org-ssg-templates-directory))))
+     (html (iduh-org-mode-ssg--generate-html doc css-path header-template footer-template)))
     ;; Validate required fields
     (unless (plist-get doc :date)
       (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-parse-error
@@ -615,8 +623,10 @@ Returns the path to the generated HTML file."
                               (concat iduh-org-ssg--current-post-slug ".html")
                             (concat (file-name-base input-file) ".html")))
          (output-file (expand-file-name output-filename output-dir))
-         (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
-         (footer-template (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template))
+         (header-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template)
+                              (iduh-org-mode-ssg--load-template (expand-file-name "header.html" iduh-org-ssg-templates-directory))))
+         (footer-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template)
+                              (iduh-org-mode-ssg--load-template (expand-file-name "footer.html" iduh-org-ssg-templates-directory))))
          (html (iduh-org-mode-ssg--generate-html doc iduh-org-ssg-css-path header-template footer-template)))
     
     ;; Validate required fields
