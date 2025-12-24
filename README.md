@@ -1,49 +1,7 @@
 # IDUH Org-Mode Static Site Generator
 
-A minimal, elegant static site generator for Emacs Org-Mode files. Convert your org files into beautifully styled HTML pages with zero configuration.
-
-## Features
-
-- **Simple Org-Mode syntax** – titles, subtitles, sections, paragraphs, blockquotes, images
-- **Inline formatting** – bold, italic, underline, strikethrough
-- **Beautiful default styling** – responsive, dark mode support, Google Fonts
-- **Batch processing** – generate an entire site from a directory of org files
-- **Customizable templates** – optional header/footer templates
-- **Static file handling** – CSS and assets are properly linked for HTTP serving
-
----
-
-## Directory Structure
-
-```
-your-project/
-├── posts/                          # Source org files (configurable)
-│   ├── my-first-post.org
-│   ├── another-article.org
-│   └── assets/                     # Post-specific images/media
-│       └── example-image.png
-│
-├── templates/                      # Optional HTML templates
-│   ├── header.html                 # Site header/navigation
-│   └── footer.html                 # Site footer
-│
-├── static/                         # Static assets
-│   ├── css/
-│   │   └── style.css              # Main stylesheet
-│   └── images/                     # Site-wide images (logo, favicon, etc.)
-│
-├── public/                         # Generated output (configurable)
-│   ├── my-first-post.html         # Generated from posts/my-first-post.org
-│   ├── another-article.html       # Generated from posts/another-article.org
-│   ├── css/
-│   │   └── style.css              # Copied from static/
-│   └── assets/
-│       └── example-image.png      # Copied from posts/assets/
-│
-└── config.el                       # Site configuration (optional)
-```
-
----
+Publish your Org-Mode documents as blog posts, highly opinionated for blog post generation.
+In experimental stage, and created for personal use. mostly vibe coded.
 
 ### Supported Org Syntax
 
@@ -101,6 +59,53 @@ your-project/
 ```
 
 ---
+
+
+
+## Features
+
+- **Simple Org-Mode syntax** – titles, subtitles, sections, paragraphs, blockquotes, images
+- **Inline formatting** – bold, italic, underline, strikethrough
+- **Beautiful default styling** – responsive, dark mode support, Google Fonts
+- **Batch processing** – generate an entire site from a directory of org files
+- **Customizable templates** – optional header/footer templates
+- **Static file handling** – CSS and assets are properly linked for HTTP serving
+
+---
+
+## Directory Structure
+
+```
+your-project/
+├── posts/                          # Source org files (configurable)
+│   ├── my-first-post.org
+│   ├── another-article.org
+│   └── assets/                     # Post-specific images/media
+│       └── example-image.png
+│
+├── templates/                      # Optional HTML templates
+│   ├── header.html                 # Site header/navigation
+│   └── footer.html                 # Site footer
+│
+├── static/                         # Static assets
+│   ├── css/
+│   │   └── style.css              # Main stylesheet
+│   └── images/                     # Site-wide images (logo, favicon, etc.)
+│
+├── public/                         # Generated output (configurable)
+│   ├── my-first-post.html         # Generated from posts/my-first-post.org
+│   ├── another-article.html       # Generated from posts/another-article.org
+│   ├── css/
+│   │   └── style.css              # Copied from static/
+│   └── assets/
+│       └── example-image.png      # Copied from posts/assets/
+│
+└── config.el                       # Site configuration (optional)
+```
+
+---
+
+
 
 ## Template System
 
@@ -232,48 +237,6 @@ python -m http.server 8000
 
 ---
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           IDUH Org-Mode SSG                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────────┐    ┌──────────────────┐    ┌────────────────────────┐   │
-│  │  Org Files   │───▶│  Parser Module   │───▶│  Document AST (plist)  │   │
-│  │  (posts/)    │    │                  │    │  :title, :date,        │   │
-│  └──────────────┘    │  - Metadata      │    │  :sections, :content   │   │
-│                      │  - Sections      │    └───────────┬────────────┘   │
-│                      │  - Inline fmt    │                │                │
-│                      └──────────────────┘                │                │
-│                                                          ▼                │
-│  ┌──────────────┐    ┌──────────────────┐    ┌────────────────────────┐   │
-│  │  Templates   │───▶│  Generator       │◀───│  Document AST          │   │
-│  │  (optional)  │    │  Module          │    │                        │   │
-│  └──────────────┘    │                  │    └────────────────────────┘   │
-│                      │  - HTML output   │                                 │
-│  ┌──────────────┐    │  - Template      │    ┌────────────────────────┐   │
-│  │  Static      │    │    injection     │───▶│  HTML Files            │   │
-│  │  Assets      │    │  - Asset paths   │    │  (public/)             │   │
-│  │  (static/)   │    └──────────────────┘    └────────────────────────┘   │
-│  └──────────────┘                                                         │
-│         │                                                                 │
-│         └─────────────────────────Copied to public/───────────────────────│
-│                                                                           │
-└───────────────────────────────────────────────────────────────────────────┘
-```
-
-### Module Responsibilities
-
-| Module         | Responsibility                                                    |
-|----------------|-------------------------------------------------------------------|
-| **Parser**     | Read org files, extract metadata, build AST                       |
-| **Generator**  | Convert AST to HTML, apply templates, resolve asset paths         |
-| **Builder**    | Orchestrate file discovery, invoke parser/generator, copy assets  |
-| **Config**     | Manage user configuration, provide defaults                       |
-
----
-
 ## Filename Convention
 
 Generated HTML files are named based on the org file's `#+TITLE`:
@@ -302,17 +265,6 @@ The SSG provides clear error messages for common issues:
 | `Sub-heading not allowed`| Used `** Heading` instead of `* Heading` | Use single-level headings only       |
 | `Image without alt text` | `[[image.png]]` without description      | Use `[[image.png][Alt text]]`        |
 | `Unclosed quote block`   | Missing `#+END_QUOTE`                    | Close your `#+BEGIN_QUOTE` blocks    |
-
----
-
-## Roadmap
-
-- [ ] Index page generation (list of all posts)
-- [ ] RSS/Atom feed generation
-- [ ] Tag/category pages
-- [ ] Syntax highlighting for code blocks
-- [ ] Table support
-- [ ] Incremental builds (only changed files)
 
 ---
 
