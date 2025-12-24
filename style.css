@@ -19,14 +19,22 @@
   --color-code-text: #d4d4d4;
 
   /* --- Spacing (rem-based, 1rem = 16px) --- */
-  --space-xs: 0.25rem;    /* 4px */
-  --space-sm: 0.5rem;     /* 8px */
-  --space-md: 1rem;       /* 16px */
-  --space-lg: 1.5rem;     /* 24px */
-  --space-xl: 2rem;       /* 32px */
-  --space-2xl: 3rem;      /* 48px */
-  --space-3xl: 4rem;      /* 64px */
-  --space-4xl: 6rem;      /* 96px */
+  --space-xs: 0.25rem;
+  /* 4px */
+  --space-sm: 0.5rem;
+  /* 8px */
+  --space-md: 1rem;
+  /* 16px */
+  --space-lg: 1.5rem;
+  /* 24px */
+  --space-xl: 2rem;
+  /* 32px */
+  --space-2xl: 3rem;
+  /* 48px */
+  --space-3xl: 4rem;
+  /* 64px */
+  --space-4xl: 6rem;
+  /* 96px */
 
   /* --- Typography --- */
   --font-title: 'Playfair Display', Georgia, serif;
@@ -36,17 +44,26 @@
   --font-code: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* --- Font Sizes --- */
-  --text-sm: 0.875rem;    /* 14px */
-  --text-base: 1rem;      /* 16px */
-  --text-lg: 1.125rem;    /* 18px */
-  --text-xl: 1.25rem;     /* 20px */
-  --text-2xl: 1.5rem;     /* 24px */
-  --text-3xl: 2rem;       /* 32px */
-  --text-4xl: 2.5rem;     /* 40px */
-  --text-5xl: 3rem;       /* 48px */
+  --text-sm: 0.875rem;
+  /* 14px */
+  --text-base: 1rem;
+  /* 16px */
+  --text-lg: 1.125rem;
+  /* 18px */
+  --text-xl: 1.25rem;
+  /* 20px */
+  --text-2xl: 1.5rem;
+  /* 24px */
+  --text-3xl: 2rem;
+  /* 32px */
+  --text-4xl: 2.5rem;
+  /* 40px */
+  --text-5xl: 3rem;
+  /* 48px */
 
   /* --- Layout --- */
-  --max-width: 42rem;     /* ~672px - optimal reading width */
+  --max-width: 42rem;
+  /* ~672px - optimal reading width */
   --line-height: 1.75;
   --line-height-tight: 1.3;
 
@@ -99,6 +116,30 @@ body {
   padding: var(--space-lg);
 }
 
+/* === SELECTION & SCROLLBAR === */
+::selection {
+  background-color: var(--color-accent);
+  color: white;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 10px;
+  border: 3px solid var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
 /* === ARTICLE CONTAINER === */
 article {
   max-width: var(--max-width);
@@ -109,7 +150,7 @@ article {
 }
 
 /* === HEADER (Title & Subtitle) === */
-article > header {
+article>header {
   margin-bottom: var(--space-3xl);
   text-align: center;
 }
@@ -137,7 +178,7 @@ section {
   margin-bottom: var(--space-3xl);
 }
 
-section > h2 {
+section>h2 {
   font-family: var(--font-title);
   font-size: var(--text-3xl);
   font-weight: 600;
@@ -210,9 +251,18 @@ figure img {
   display: block;
   max-width: 100%;
   height: auto;
+  margin: 0 auto;
+  /* Center the image */
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-              0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+figure img:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 figure figcaption {
@@ -279,7 +329,7 @@ a:hover {
     font-size: var(--text-lg);
   }
 
-  section > h2 {
+  section>h2 {
     font-size: var(--text-2xl);
   }
 
@@ -305,7 +355,7 @@ a:hover {
   }
 
   .title,
-  section > h2 {
+  section>h2 {
     page-break-after: avoid;
   }
 

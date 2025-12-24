@@ -234,18 +234,23 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
     (dolist (element elements)
       (let ((type (org-element-type element)))
         (cond
-         ;; Paragraph
+         ;; Paragraph (Check for standalone image)
          ((eq type 'paragraph)
           (let* ((contents (org-element-contents element))
-                 (first-child (car contents)))
-            (if (and (= (length contents) 1)
+                 (non-blank-contents (cl-remove-if (lambda (c) (and (stringp c) (string-blank-p c))) contents))
+                 (first-child (car non-blank-contents)))
+            (if (and (= (length non-blank-contents) 1)
                      (eq (org-element-type first-child) 'link)
                      (string= (org-element-property :type first-child) "file")
                      (iduh-org-ssg--image-p (org-element-property :path first-child)))
-                (let ((src (iduh-org-ssg--handle-file-link (org-element-property :path first-child)))
-                      (alt (org-element-interpret-data (org-element-contents first-child))))
-                  (if (and alt (> (length (string-trim alt)) 0))
-                      (push (list :type 'image :src src :alt (string-trim alt)) items)
+                (let* ((src (iduh-org-ssg--handle-file-link (org-element-property :path first-child)))
+                       (desc (org-element-contents first-child))
+                       ;; Extract plain text from description for alt/caption
+                       (alt (if desc
+                                (string-trim (org-element-interpret-data desc))
+                              "")))
+                  (if (> (length alt) 0)
+                      (push (list :type 'image :src src :alt alt) items)
                     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-image-error
                                               "Image must have alt text: [[%s]]" src)))
               (push (list :type 'paragraph :content contents) items))))
@@ -312,11 +317,11 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
                                                 "")))
                        (cond
                         (is-image
-                         (concat "<img src=\"" (iduh-org-mode-ssg--escape-html final-path) "\" alt=\"" 
-                                 (if (> (length rendered-contents) 0)
-                                     rendered-contents
-                                   (iduh-org-mode-ssg--escape-html (file-name-nondirectory path)))
-                                 "\">"))
+                         (let* ((desc (org-element-contents data))
+                                (alt (if (> (length desc) 0)
+                                         (string-trim (iduh-org-mode-ssg--render-ast desc))
+                                       (iduh-org-mode-ssg--escape-html (file-name-nondirectory path)))))
+                           (iduh-org-mode-ssg--render-image final-path alt)))
                         (t
                          (let ((label (if (> (length rendered-contents) 0)
                                           rendered-contents
@@ -481,6 +486,14 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
      (mapconcat #'iduh-org-mode-ssg--generate-content content "")
      "    </section>")))
 
+(defun iduh-org-mode-ssg--render-image (src alt)
+  "Render an image with SRC and ALT text wrapped in a <figure> tag."
+  (concat "      <figure>\n"
+          "        <img src=\"" (iduh-org-mode-ssg--escape-html src) "\" "
+          "alt=\"" (iduh-org-mode-ssg--escape-html alt) "\">\n"
+          "        <figcaption>" (iduh-org-mode-ssg--escape-html alt) "</figcaption>\n"
+          "      </figure>\n"))
+
 (defun iduh-org-mode-ssg--generate-content (item)
   "Generate HTML for a content ITEM (paragraph, image, or quote)."
   (let ((type (plist-get item :type)))
@@ -488,13 +501,7 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
       ('paragraph
        (concat "      <p>" (string-trim (iduh-org-mode-ssg--render-ast (plist-get item :content))) "</p>\n"))
       ('image
-       (let ((src (plist-get item :src))
-             (alt (plist-get item :alt)))
-         (concat "      <figure>\n"
-                 "        <img src=\"" (iduh-org-mode-ssg--escape-html src) "\" "
-                 "alt=\"" (iduh-org-mode-ssg--escape-html alt) "\">\n"
-                 "        <figcaption>" (iduh-org-mode-ssg--escape-html alt) "</figcaption>\n"
-                 "      </figure>\n")))
+       (iduh-org-mode-ssg--render-image (plist-get item :src) (plist-get item :alt)))
       ('quote
        (let ((contents (plist-get item :content)))
          (concat "      <blockquote>\n"
