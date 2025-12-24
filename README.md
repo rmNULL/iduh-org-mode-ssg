@@ -3,6 +3,34 @@
 Publish your Org-Mode documents as blog posts, highly opinionated for blog post generation.
 In experimental stage, and created for personal use. mostly vibe coded.
 
+## Quick Start (with `use-package`)
+
+```elisp
+(use-package iduh-org-mode-ssg
+  :straight (iduh-org-mode-ssg
+             :type git
+             :host github
+             :repo "rmnull/iduh-org-mode-ssg")
+  :commands (iduh-org-ssg-build-site
+             iduh-org-ssg-generate-file
+             iduh-org-mode-ssg-preview
+             iduh-org-ssg-clean)
+  :custom
+  ;; 1. Where your source .org files are stored
+  (iduh-org-ssg-posts-directory "~/blog/posts/")
+  
+  ;; 2. The skeleton containing templates/ and static/ assets
+  (iduh-org-ssg-skeleton-directory "~/blog/skeleton/")
+  
+  ;; 3. The destination for your generated website
+  (iduh-org-ssg-output-directory "~/blog/public/")
+  
+  :bind (("C-c o s b" . iduh-org-ssg-build-site)
+         ("C-c o s c" . iduh-org-ssg-clean)))
+```
+
+---
+
 ### Supported Org Syntax
 
 | Feature | Org Syntax | Notes |
@@ -29,15 +57,13 @@ In experimental stage, and created for personal use. mostly vibe coded.
 
 ### Required Configuration Variables
 
-You typically only set **two variables**:
+You typically only set **three variables**:
 
 | Variable                        | Default       | Description |
 |---------------------------------|---------------|-------------|
+| `iduh-org-ssg-posts-directory`    | `"posts/"`    | Directory containing your source `.org` files |
 | `iduh-org-ssg-skeleton-directory` | `"skeleton/"` | Directory containing `templates/` + `static/` |
 | `iduh-org-ssg-output-directory`   | `"public/"`   | Output directory for generated HTML |
-
-Posts are read from `posts/` by default. If your notes live elsewhere, pass `:posts`
-to `iduh-org-ssg-build-site`.
 
 ### Example Configuration (config.el)
 
@@ -118,6 +144,8 @@ your-project/
 
 
 ## Template System
+
+For a comprehensive guide on creating custom themes, see the [Skeleton/Theming Guide](./SKELETON_GUIDE.md).
 
 Templates are HTML files in your skeleton (`skeleton/templates/`) that wrap around
 your generated content.
