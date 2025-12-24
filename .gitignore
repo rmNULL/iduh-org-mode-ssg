@@ -1,0 +1,29 @@
+# Ignore generated output directory
+public/
+
+# Ignore example/test org files
+example.org
+output.html
+output-1.html
+sunset-minimal.jpg
+
+# Ignore Emacs backup files
+*~
+\#*\#
+.\#*
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore editor files
+*.swp
+*.swo
+*~
+
+# Keep source code
+!iduh-org-mode-ssg.el
+!README.md
+!static/
+!templates/
+!posts/
