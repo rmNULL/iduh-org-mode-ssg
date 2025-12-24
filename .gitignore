@@ -11,6 +11,8 @@ Thumbs.db
 !todo.md
 !LICENSE
 !static/
+!static/*
+!static/**/*
 !templates/
 !posts/
 !tests/
