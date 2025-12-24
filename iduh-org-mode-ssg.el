@@ -33,8 +33,12 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'ox)
-;; Optional: skeleton verification helpers (new file).
-(require 'iduh-org-mode-ssg-skeleton nil t)
+;; Optional: skeleton verification helpers.
+(unless (require 'iduh-org-mode-ssg-skeleton nil t)
+  (let ((skel-file (expand-file-name "iduh-org-mode-ssg-skeleton.el"
+                                     (file-name-directory (or load-file-name (and (boundp 'byte-compile-current-file) byte-compile-current-file) buffer-file-name "")))))
+    (when (and (stringp skel-file) (file-exists-p skel-file))
+      (load skel-file nil t))))
 
 ;;; ============================================================================
 ;;; Configuration
@@ -702,7 +706,8 @@ This function:
          (iduh-org-mode-ssg-google-fonts-url (or fonts-url iduh-org-mode-ssg-google-fonts-url))
          
          ;; Verify skeleton directory structure
-         (_ (iduh-org-ssg-verify-skeleton skeleton-root))
+         (_ (when (fboundp 'iduh-org-ssg-verify-skeleton)
+              (iduh-org-ssg-verify-skeleton skeleton-root)))
          
          (templates-dir (expand-file-name "templates/" skeleton-root))
          (static-dir (expand-file-name "static/" skeleton-root))
