@@ -1,0 +1,37 @@
+#+TITLE: Getting Started with Org-Mode SSG
+#+SUBTITLE: A quick guide to building your first static site
+#+DATE: 2024-12-20
+#+AUTHOR: Documentation Team
+#+DESCRIPTION: Learn how to use the IDUH Org-Mode Static Site Generator
+
+* What is Org-Mode SSG?
+
+This is a /minimal/ static site generator that converts Org-Mode files into beautifully styled HTML pages. It's designed for simplicity and ease of use.
+
+* Quick Start
+
+Setting up your first site is easy. Just follow these steps:
+
+Create a *posts* directory for your org files. Each file should have a title and a publication date at minimum.
+
+Run the build command to generate your HTML files. They will appear in the *public* directory, ready to be served.
+
+#+BEGIN_QUOTE
+Simplicity is the ultimate sophistication.
+
+— Leonardo da Vinci
+#+END_QUOTE
+
+* Features
+
+The SSG supports several useful features:
+
+- Inline formatting like *bold*, /italic/, _underline_, and +strikethrough+ text.
+- Block quotes for highlighting important passages.
+- Images with mandatory alt text for accessibility.
+- Automatic slug generation for SEO-friendly URLs.
+- Customizable HTML templates.
+
+* Next Steps
+
+Explore the documentation to learn about advanced features like custom templates and configuration options.

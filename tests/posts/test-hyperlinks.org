@@ -1,0 +1,15 @@
+#+TITLE: Hyperlink Test
+#+DATE: 2024-12-24
+#+DESCRIPTION: Testing various hyperlink formats
+
+* Testing Links
+
+This is an [[https://google.com][External Link with Description]].
+
+This is a bare link: [[https://orgmode.org]].
+
+This is a [[file:getting-started.org][Link to another Org file]].
+
+This is a link to a local file that is not an image block: [[file:notes.txt][Notes]].
+
+Even *bold* text can be a [[https://example.com][link with *bold*]].
