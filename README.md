@@ -68,18 +68,16 @@ You typically only set **three variables**:
 ### Example Configuration (config.el)
 
 ```elisp
-;; Load the SSG package
-(require 'iduh-org-mode-ssg)
-
-;; Configure the skeleton + output
+;; Custom variables are used as defaults - set them first:
 (setq iduh-org-ssg-skeleton-directory "~/blog/skeleton/")
 (setq iduh-org-ssg-output-directory "~/blog/public/")
+(setq iduh-org-ssg-posts-directory "~/blog/posts/")
 
-;; Generate the site
-(iduh-org-ssg-build-site :base "~/blog/")
+;; Then just call (uses custom variables as defaults):
+(iduh-org-ssg-build-site)
 
-;; If your notes are not in ~/blog/posts/, provide :posts:
-;; (iduh-org-ssg-build-site :base "~/blog/" :posts "content/")
+;; Or override specific paths with keyword args:
+;; (iduh-org-ssg-build-site :posts "~/blog/content/")
 ```
 
 ### Skeleton Verification
@@ -238,14 +236,17 @@ Each org file generates an HTML file with this structure:
 ### Batch Site Generation
 
 ```elisp
-;; Generate all org files in posts/ to public/
-(iduh-org-ssg-build-site :base "~/your-project/")
+;; Uses custom variables as defaults:
+(iduh-org-ssg-build-site)
 
-;; Or with custom directories
+;; Override specific paths with keyword arguments:
+(iduh-org-ssg-build-site :skeleton "~/my-theme/" :output "dist/")
+
+;; Override all paths:
 (iduh-org-ssg-build-site 
-  :base "~/your-project/"
-  :posts "content/"
-  :output "dist/")
+  :skeleton "~/your-project/skeleton/"
+  :output "~/your-project/dist/"
+  :posts "~/your-project/content/")
 ```
 
 ### Interactive Commands

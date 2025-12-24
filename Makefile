@@ -5,6 +5,7 @@ EMACS = emacs
 LIB = iduh-org-mode-ssg.el
 PUBLIC_DIR = public
 POSTS_DIR = tests/posts
+SKELETON_DIR = skeleton
 PORT = 8000
 
 # Default target
@@ -15,7 +16,7 @@ all: build
 .PHONY: build
 build:
 	@echo "🚀 Building site..."
-	@$(EMACS) --batch -l $(LIB) --eval '(iduh-org-ssg-build-site :posts "$(POSTS_DIR)" :output "$(PUBLIC_DIR)")'
+	@$(EMACS) --batch -l $(LIB) --eval '(iduh-org-ssg-build-site :skeleton "$(SKELETON_DIR)" :output "$(PUBLIC_DIR)" :posts "$(POSTS_DIR)")'
 	@echo "✅ Build complete! Files are in the '$(PUBLIC_DIR)' directory."
 
 # Clean the output directory
