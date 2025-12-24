@@ -136,7 +136,12 @@ article {
 /* === HEADER (Title & Subtitle) === */
 article>header {
   margin-bottom: var(--space-3xl);
-  text-align: center;
+  padding: var(--space-lg);
+  background-color: var(--color-bg-secondary);
+  border: var(--bevel-outset);
+  border-color: var(--color-border-light) var(--color-border-dark) var(--color-border-dark) var(--color-border-light);
+  box-shadow: 6px 6px 0px var(--color-border-dark);
+  text-align: left;
 }
 
 .title {
@@ -145,21 +150,17 @@ article>header {
   font-weight: 700;
   line-height: var(--line-height-tight);
   color: var(--color-accent);
-  background-color: var(--color-bg-secondary);
-  margin-bottom: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: var(--bevel-outset);
-  border-color: var(--color-border-light) var(--color-border-dark) var(--color-border-dark) var(--color-border-light);
-  text-align: left;
-  box-shadow: 5px 5px 0px var(--color-border-dark);
+  margin-bottom: var(--space-xs);
+  padding: 0;
 }
 
 .subtitle {
   font-family: var(--font-subtitle);
   font-size: var(--text-xl);
   font-weight: 400;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   line-height: var(--line-height);
+  margin-bottom: var(--space-sm);
 }
 
 .published-date {
@@ -167,7 +168,6 @@ article>header {
   font-family: var(--font-subtitle);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  margin-top: var(--space-md);
   font-style: italic;
 }
 
