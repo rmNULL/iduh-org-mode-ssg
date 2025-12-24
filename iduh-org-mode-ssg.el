@@ -52,6 +52,41 @@
   :type 'string
   :group 'iduh-org-mode-ssg)
 
+(defcustom iduh-org-ssg-posts-directory "posts/"
+  "Source directory containing org files to process."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-output-directory "public/"
+  "Output directory for generated HTML files."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-static-directory "static/"
+  "Directory containing static assets (CSS, images, etc.)."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-templates-directory "templates/"
+  "Directory containing HTML templates."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-css-path "css/style.css"
+  "Path to CSS file relative to the output directory."
+  :type 'string
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-header-template nil
+  "Path to header HTML template file, or nil to disable."
+  :type '(choice (const nil) string)
+  :group 'iduh-org-mode-ssg)
+
+(defcustom iduh-org-ssg-footer-template nil
+  "Path to footer HTML template file, or nil to disable."
+  :type '(choice (const nil) string)
+  :group 'iduh-org-mode-ssg)
+
 ;;; ============================================================================
 ;;; Error Handling
 ;;; ============================================================================
@@ -80,6 +115,9 @@ Returns a plist with :title, :subtitle, and :sections."
   "Parse the current buffer and return a structured document."
   (let ((title nil)
         (subtitle nil)
+        (date nil)
+        (author nil)
+        (description nil)
         (sections '())
         (current-section nil)
         (current-content '())
@@ -109,6 +147,18 @@ Returns a plist with :title, :subtitle, and :sections."
          ;; Subtitle
          ((string-match "^#\\+SUBTITLE:[ \t]*\\(.+\\)$" line)
           (setq subtitle (match-string 1 line)))
+         
+         ;; Date (mandatory)
+         ((string-match "^#\\+DATE:[ \t]*\\(.+\\)$" line)
+          (setq date (string-trim (match-string 1 line))))
+         
+         ;; Author
+         ((string-match "^#\\+AUTHOR:[ \t]*\\(.+\\)$" line)
+          (setq author (match-string 1 line)))
+         
+         ;; Description (for meta tag)
+         ((string-match "^#\\+DESCRIPTION:[ \t]*\\(.+\\)$" line)
+          (setq description (match-string 1 line)))
          
          ;; Begin quote
          ((string-match "^#\\+BEGIN_QUOTE[ \t]*$" line)
@@ -178,6 +228,9 @@ Returns a plist with :title, :subtitle, and :sections."
     
     (list :title title
           :subtitle subtitle
+          :date date
+          :author author
+          :description description
           :sections (nreverse sections))))
 
 ;;; ============================================================================
@@ -250,14 +303,65 @@ Uses placeholders to avoid regex conflicts when multiple formats are adjacent."
     result))
 
 ;;; ============================================================================
+;;; Date Formatting
+;;; ============================================================================
+
+(defconst iduh-org-mode-ssg--month-names
+  '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec")
+  "Short month names for date formatting.")
+
+(defun iduh-org-mode-ssg--format-date (date-string)
+  "Format DATE-STRING as 'Published on DD Mon YYYY'.
+DATE-STRING should be in YYYY-MM-DD format."
+  (when date-string
+    (if (string-match "^\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)$" date-string)
+        (let* ((year (match-string 1 date-string))
+               (month (string-to-number (match-string 2 date-string)))
+               (day (string-to-number (match-string 3 date-string)))
+               (month-name (nth (1- month) iduh-org-mode-ssg--month-names)))
+          (format "Published on %d %s %s" day month-name year))
+      ;; If not in expected format, return as-is with prefix
+      (concat "Published on " date-string))))
+
+;;; ============================================================================
+;;; Template Processing
+;;; ============================================================================
+
+(defun iduh-org-mode-ssg--load-template (template-path)
+  "Load template from TEMPLATE-PATH if it exists, otherwise return nil."
+  (when (and template-path (file-exists-p template-path))
+    (with-temp-buffer
+      (insert-file-contents template-path)
+      (buffer-string))))
+
+(defun iduh-org-mode-ssg--process-template (template doc)
+  "Process TEMPLATE string, replacing placeholders with values from DOC.
+Supported placeholders: {{title}}, {{date}}, {{author}}, {{year}}."
+  (when template
+    (let ((result template)
+          (title (or (plist-get doc :title) ""))
+          (date (or (plist-get doc :date) ""))
+          (author (or (plist-get doc :author) "")))
+      (setq result (replace-regexp-in-string "{{title}}" title result t t))
+      (setq result (replace-regexp-in-string "{{date}}" date result t t))
+      (setq result (replace-regexp-in-string "{{author}}" author result t t))
+      (setq result (replace-regexp-in-string "{{year}}" (format-time-string "%Y") result t t))
+      result)))
+
+;;; ============================================================================
 ;;; HTML Generation
 ;;; ============================================================================
 
-(defun iduh-org-mode-ssg--generate-html (doc css-path)
-  "Generate HTML string from parsed document DOC, linking to CSS-PATH."
+(defun iduh-org-mode-ssg--generate-html (doc css-path &optional header-template footer-template)
+  "Generate HTML string from parsed document DOC, linking to CSS-PATH.
+Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
   (let ((title (or (plist-get doc :title) "Untitled"))
         (subtitle (plist-get doc :subtitle))
-        (sections (plist-get doc :sections)))
+        (date (plist-get doc :date))
+        (description (plist-get doc :description))
+        (sections (plist-get doc :sections))
+        (processed-header (iduh-org-mode-ssg--process-template header-template doc))
+        (processed-footer (iduh-org-mode-ssg--process-template footer-template doc)))
     (concat
      ;; DOCTYPE and HTML opening
      "<!DOCTYPE html>\n"
@@ -267,14 +371,21 @@ Uses placeholders to avoid regex conflicts when multiple formats are adjacent."
      "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
      "  <title>" (iduh-org-mode-ssg--escape-html title) "</title>\n"
      "  <meta name=\"generator\" content=\"iduh-org-mode-ssg\">\n"
+     (when date
+       (concat "  <meta name=\"date\" content=\"" (iduh-org-mode-ssg--escape-html date) "\">\n"))
+     (when description
+       (concat "  <meta name=\"description\" content=\"" (iduh-org-mode-ssg--escape-html description) "\">\n"))
      "  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
      "  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n"
      "  <link href=\"" iduh-org-mode-ssg-google-fonts-url "\" rel=\"stylesheet\">\n"
      "  <link rel=\"stylesheet\" href=\"" css-path "\">\n"
      "</head>\n"
      "<body>\n"
+     ;; Optional header template
+     (when processed-header
+       (concat processed-header "\n"))
      "  <article>\n"
-     ;; Header with title and subtitle
+     ;; Header with title, subtitle, and date
      "    <header>\n"
      "      <h1 class=\"title\">" (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html title)) "</h1>\n"
      (if subtitle
@@ -282,10 +393,17 @@ Uses placeholders to avoid regex conflicts when multiple formats are adjacent."
                  (iduh-org-mode-ssg--format-inline (iduh-org-mode-ssg--escape-html subtitle))
                  "</p>\n")
        "")
+     (when date
+       (concat "      <time class=\"published-date\" datetime=\"" date "\">"
+               (iduh-org-mode-ssg--format-date date)
+               "</time>\n"))
      "    </header>\n"
      ;; Sections
      (mapconcat #'iduh-org-mode-ssg--generate-section sections "\n")
      "\n  </article>\n"
+     ;; Optional footer template
+     (when processed-footer
+       (concat processed-footer "\n"))
      "</body>\n"
      "</html>\n")))
 
@@ -334,6 +452,35 @@ Uses placeholders to avoid regex conflicts when multiple formats are adjacent."
 ;;; Public API
 ;;; ============================================================================
 
+(defun iduh-org-ssg--slugify (title)
+  "Convert TITLE to a URL-friendly slug for use as filename.
+E.g., 'My First Post' becomes 'my-first-post'."
+  (let ((slug (downcase title)))
+    ;; Replace spaces and underscores with hyphens
+    (setq slug (replace-regexp-in-string "[ _]+" "-" slug))
+    ;; Remove non-alphanumeric characters except hyphens
+    (setq slug (replace-regexp-in-string "[^a-z0-9-]" "" slug))
+    ;; Remove multiple consecutive hyphens
+    (setq slug (replace-regexp-in-string "-+" "-" slug))
+    ;; Remove leading/trailing hyphens
+    (setq slug (replace-regexp-in-string "^-\\|-$" "" slug))
+    slug))
+
+(defun iduh-org-ssg--copy-directory-contents (src-dir dest-dir)
+  "Recursively copy contents of SRC-DIR to DEST-DIR."
+  (when (file-directory-p src-dir)
+    (unless (file-directory-p dest-dir)
+      (make-directory dest-dir t))
+    (dolist (file (directory-files src-dir t))
+      (let ((filename (file-name-nondirectory file))
+            (dest-file (expand-file-name (file-name-nondirectory file) dest-dir)))
+        (unless (member filename '("." ".."))
+          (if (file-directory-p file)
+              (iduh-org-ssg--copy-directory-contents 
+               file 
+               (expand-file-name filename dest-dir))
+            (copy-file file dest-file t)))))))
+
 ;;;###autoload
 (defun iduh-org-mode-ssg-generate (input-file output-file css-path)
   "Generate HTML from INPUT-FILE and write to OUTPUT-FILE.
@@ -350,11 +497,123 @@ CSS-PATH is the path to the stylesheet (relative to the output HTML)."
     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-error "Input file does not exist: %s" input-file))
   
   (let* ((doc (iduh-org-mode-ssg--parse-file input-file))
-         (html (iduh-org-mode-ssg--generate-html doc css-path)))
+         (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
+         (footer-template (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template))
+         (html (iduh-org-mode-ssg--generate-html doc css-path header-template footer-template)))
+    ;; Validate required fields
+    (unless (plist-get doc :date)
+      (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-parse-error
+                      "Missing #+DATE field in %s. This field is mandatory." input-file))
     (with-temp-file output-file
       (insert html))
     (message "Generated: %s" output-file)
     output-file))
+
+;;;###autoload
+(defun iduh-org-ssg-generate-file (input-file output-dir)
+  "Generate HTML from INPUT-FILE into OUTPUT-DIR.
+The output filename is derived from the org file's #+TITLE.
+Returns the path to the generated HTML file."
+  (interactive
+   (list
+    (read-file-name "Input Org file: " iduh-org-ssg-posts-directory nil t nil
+                    (lambda (f) (or (file-directory-p f)
+                                     (string-suffix-p ".org" f))))
+    (read-directory-name "Output directory: " iduh-org-ssg-output-directory)))
+  
+  (unless (file-exists-p input-file)
+    (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-error "Input file does not exist: %s" input-file))
+  
+  ;; Ensure output directory exists
+  (unless (file-directory-p output-dir)
+    (make-directory output-dir t))
+  
+  (let* ((doc (iduh-org-mode-ssg--parse-file input-file))
+         (title (plist-get doc :title))
+         (date (plist-get doc :date))
+         (output-filename (if title
+                              (concat (iduh-org-ssg--slugify title) ".html")
+                            (concat (file-name-base input-file) ".html")))
+         (output-file (expand-file-name output-filename output-dir))
+         (header-template (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template))
+         (footer-template (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template))
+         (html (iduh-org-mode-ssg--generate-html doc iduh-org-ssg-css-path header-template footer-template)))
+    
+    ;; Validate required fields
+    (unless date
+      (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-parse-error
+                      "Missing #+DATE field in %s. This field is mandatory." input-file))
+    
+    (with-temp-file output-file
+      (insert html))
+    (message "Generated: %s" output-file)
+    output-file))
+
+;;;###autoload
+(defun iduh-org-ssg-build-site (&optional base-dir)
+  "Build the entire static site.
+If BASE-DIR is provided, use it as the project root.
+Otherwise, use the directory containing the posts directory.
+
+This function:
+1. Finds all .org files in posts directory
+2. Generates HTML for each (with mandatory #+DATE validation)
+3. Copies static assets to output directory
+4. Returns the list of generated files."
+  (interactive
+   (list (read-directory-name "Project base directory: " default-directory)))
+  
+  (let* ((base (or base-dir default-directory))
+         (posts-dir (expand-file-name iduh-org-ssg-posts-directory base))
+         (output-dir (expand-file-name iduh-org-ssg-output-directory base))
+         (static-dir (expand-file-name iduh-org-ssg-static-directory base))
+         (generated-files '()))
+    
+    ;; Validate posts directory exists
+    (unless (file-directory-p posts-dir)
+      (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-error
+                      "Posts directory does not exist: %s" posts-dir))
+    
+    ;; Ensure output directory exists
+    (unless (file-directory-p output-dir)
+      (make-directory output-dir t))
+    
+    ;; Copy static assets to output directory
+    (when (file-directory-p static-dir)
+      (iduh-org-ssg--copy-directory-contents static-dir output-dir)
+      (message "Copied static assets from %s" static-dir))
+    
+    ;; Process each org file
+    (dolist (org-file (directory-files posts-dir t "\\.org$"))
+      (condition-case err
+          (let ((generated (iduh-org-ssg-generate-file org-file output-dir)))
+            (push generated generated-files))
+        (error
+         (message "Error processing %s: %s" org-file (error-message-string err)))))
+    
+    ;; Report results
+    (let ((count (length generated-files)))
+      (message "Site build complete: %d file%s generated in %s"
+               count
+               (if (= count 1) "" "s")
+               output-dir))
+    
+    (nreverse generated-files)))
+
+;;;###autoload
+(defun iduh-org-ssg-clean (&optional base-dir)
+  "Remove all generated files from the output directory.
+If BASE-DIR is provided, use it as the project root."
+  (interactive
+   (list (read-directory-name "Project base directory: " default-directory)))
+  
+  (let* ((base (or base-dir default-directory))
+         (output-dir (expand-file-name iduh-org-ssg-output-directory base)))
+    
+    (when (file-directory-p output-dir)
+      (when (yes-or-no-p (format "Delete all contents of %s? " output-dir))
+        (delete-directory output-dir t)
+        (message "Cleaned output directory: %s" output-dir)))))
 
 ;;;###autoload
 (defun iduh-org-mode-ssg-generate-interactive ()

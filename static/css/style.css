@@ -1,0 +1,408 @@
+/* ==========================================================================
+   IDUH-Org-Mode-SSG: Static Site Generator Stylesheet
+   A minimal, elegant stylesheet for org-mode generated HTML
+   ========================================================================== */
+
+/* === CSS CUSTOM PROPERTIES (VARIABLES) === */
+:root {
+  /* --- Colors (Light Theme) --- */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b7280;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-border: #e5e7eb;
+  --color-quote-border: #d1d5db;
+  --color-quote-bg: #f3f4f6;
+  --color-code-bg: #1e1e1e;
+  --color-code-text: #d4d4d4;
+
+  /* --- Spacing (rem-based, 1rem = 16px) --- */
+  --space-xs: 0.25rem;
+  /* 4px */
+  --space-sm: 0.5rem;
+  /* 8px */
+  --space-md: 1rem;
+  /* 16px */
+  --space-lg: 1.5rem;
+  /* 24px */
+  --space-xl: 2rem;
+  /* 32px */
+  --space-2xl: 3rem;
+  /* 48px */
+  --space-3xl: 4rem;
+  /* 64px */
+  --space-4xl: 6rem;
+  /* 96px */
+
+  /* --- Typography --- */
+  --font-title: 'Playfair Display', Georgia, serif;
+  --font-subtitle: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-quote: 'Merriweather', Georgia, serif;
+  --font-code: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Font Sizes --- */
+  --text-sm: 0.875rem;
+  /* 14px */
+  --text-base: 1rem;
+  /* 16px */
+  --text-lg: 1.125rem;
+  /* 18px */
+  --text-xl: 1.25rem;
+  /* 20px */
+  --text-2xl: 1.5rem;
+  /* 24px */
+  --text-3xl: 2rem;
+  /* 32px */
+  --text-4xl: 2.5rem;
+  /* 40px */
+  --text-5xl: 3rem;
+  /* 48px */
+
+  /* --- Layout --- */
+  --max-width: 42rem;
+  /* ~672px - optimal reading width */
+  --line-height: 1.75;
+  --line-height-tight: 1.3;
+
+  /* --- Borders & Radius --- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+/* === DARK THEME (System Preference) === */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0a0a0a;
+    --color-bg-secondary: #141414;
+    --color-text: #f5f5f5;
+    --color-text-muted: #a1a1aa;
+    --color-accent: #60a5fa;
+    --color-accent-hover: #93c5fd;
+    --color-border: #27272a;
+    --color-quote-border: #3f3f46;
+    --color-quote-bg: #18181b;
+    --color-code-bg: #1e1e1e;
+    --color-code-text: #d4d4d4;
+  }
+}
+
+/* === BASE RESET & DEFAULTS === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  line-height: var(--line-height);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  min-height: 100vh;
+  padding: var(--space-lg);
+}
+
+/* === ARTICLE CONTAINER === */
+article {
+  max-width: var(--max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: var(--space-3xl);
+  padding-bottom: var(--space-4xl);
+}
+
+/* === HEADER (Title & Subtitle) === */
+article>header {
+  margin-bottom: var(--space-3xl);
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-title);
+  font-size: var(--text-5xl);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  margin-bottom: var(--space-md);
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-family: var(--font-subtitle);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  line-height: var(--line-height);
+}
+
+.published-date {
+  display: block;
+  font-family: var(--font-subtitle);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-md);
+  font-style: italic;
+}
+
+/* === SITE HEADER (Template) === */
+.site-header {
+  max-width: var(--max-width);
+  margin: 0 auto var(--space-xl);
+  padding: var(--space-lg) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.site-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.site-logo {
+  font-family: var(--font-title);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.site-logo:hover {
+  color: var(--color-accent);
+}
+
+.nav-links {
+  display: flex;
+  list-style: none;
+  gap: var(--space-lg);
+}
+
+.nav-links a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: var(--text-base);
+  transition: color 0.2s ease;
+}
+
+.nav-links a:hover {
+  color: var(--color-accent);
+}
+
+/* === SITE FOOTER (Template) === */
+.site-footer {
+  max-width: var(--max-width);
+  margin: var(--space-3xl) auto 0;
+  padding: var(--space-xl) 0;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.footer-content {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.footer-content p {
+  margin-bottom: var(--space-sm);
+}
+
+.footer-content a {
+  color: var(--color-accent);
+}
+
+/* === SECTIONS === */
+section {
+  margin-bottom: var(--space-3xl);
+}
+
+section>h2 {
+  font-family: var(--font-title);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* === PARAGRAPHS === */
+p {
+  margin-bottom: var(--space-lg);
+  color: var(--color-text);
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+/* === INLINE TEXT FORMATTING === */
+.bold {
+  font-weight: 700;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.underline {
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+  text-underline-offset: var(--space-xs);
+  text-decoration-thickness: 2px;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-text-muted);
+  opacity: 0.75;
+}
+
+/* === BLOCKQUOTES === */
+blockquote {
+  font-family: var(--font-quote);
+  font-size: var(--text-lg);
+  font-style: italic;
+  color: var(--color-text);
+  background-color: var(--color-quote-bg);
+  border-left: 4px solid var(--color-accent);
+  padding: var(--space-lg) var(--space-xl);
+  margin: var(--space-xl) 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+blockquote p {
+  margin-bottom: var(--space-md);
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* === IMAGES & FIGURES === */
+figure {
+  margin: var(--space-xl) 0;
+}
+
+figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+figure figcaption {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-top: var(--space-sm);
+  font-style: italic;
+}
+
+/* === CODE BLOCKS (Future Support) === */
+pre {
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  font-family: var(--font-code);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  padding: var(--space-lg);
+  margin: var(--space-xl) 0;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+}
+
+/* Inline code (if needed in future) */
+code {
+  font-family: var(--font-code);
+  font-size: 0.9em;
+  background-color: var(--color-quote-bg);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* === LINKS (if needed in future) === */
+a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: var(--space-xs);
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* === RESPONSIVE ADJUSTMENTS === */
+@media (max-width: 640px) {
+  body {
+    padding: var(--space-md);
+    font-size: var(--text-base);
+  }
+
+  .title {
+    font-size: var(--text-4xl);
+  }
+
+  .subtitle {
+    font-size: var(--text-lg);
+  }
+
+  section>h2 {
+    font-size: var(--text-2xl);
+  }
+
+  blockquote {
+    padding: var(--space-md) var(--space-lg);
+  }
+
+  pre {
+    padding: var(--space-md);
+    font-size: var(--text-sm);
+  }
+}
+
+/* === PRINT STYLES === */
+@media print {
+  body {
+    background-color: white;
+    color: black;
+  }
+
+  article {
+    max-width: 100%;
+  }
+
+  .title,
+  section>h2 {
+    page-break-after: avoid;
+  }
+
+  figure {
+    page-break-inside: avoid;
+  }
+}
