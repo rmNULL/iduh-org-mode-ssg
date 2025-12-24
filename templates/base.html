@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="{{lang}}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <meta name="generator" content="iduh-org-mode-ssg">
+    {{meta}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="{{google_fonts_url}}" rel="stylesheet">
+    <link rel="stylesheet" href="{{css_path}}">
+</head>
+
+<body>
+    {{header}}
+    <article>
+        <header>
+            <h1 class="title">{{formatted_title}}</h1>
+            {{formatted_subtitle}}
+            {{formatted_date}}
+        </header>
+        {{content}}
+    </article>
+    {{footer}}
+</body>
+
+</html>
