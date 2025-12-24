@@ -7,16 +7,13 @@ Thumbs.db
 # Keep source code
 !.gitignore
 !iduh-org-mode-ssg.el
+!iduh-org-mode-ssg-skeleton.el
 !README.md
 !todo.md
 !LICENSE
-!static/
-!static/*
-!static/**/*
-!templates/
-!templates/header.html
-!templates/footer.html
-!templates/base.html
+!skeleton/
+!skeleton/*
+!skeleton/**/*
 !posts/
 !tests/
 !tests/*

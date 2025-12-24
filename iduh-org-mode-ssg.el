@@ -33,6 +33,8 @@
 (require 'cl-lib)
 (require 'org-element)
 (require 'ox)
+;; Optional: skeleton verification helpers (new file).
+(require 'iduh-org-mode-ssg-skeleton nil t)
 
 ;;; ============================================================================
 ;;; Configuration
@@ -54,8 +56,13 @@
   :type 'string
   :group 'iduh-org-mode-ssg)
 
-(defcustom iduh-org-ssg-posts-directory "posts/"
-  "Source directory containing org files to process."
+(defcustom iduh-org-ssg-skeleton-directory "skeleton/"
+  "Directory containing the site \"skeleton\" (templates + static assets).
+
+Expected layout:
+- templates/ (e.g. base.html, header.html, footer.html)
+- static/    (assets copied verbatim to the output directory)
+The generator derives templates/static/CSS/logo paths from this directory."
   :type 'string
   :group 'iduh-org-mode-ssg)
 
@@ -64,40 +71,15 @@
   :type 'string
   :group 'iduh-org-mode-ssg)
 
-(defcustom iduh-org-ssg-static-directory "static/"
-  "Directory containing static assets (CSS, images, etc.)."
-  :type 'string
-  :group 'iduh-org-mode-ssg)
+;; Minimal, convention-based layout (derived from skeleton + output).
+(defconst iduh-org-ssg--default-posts-directory "posts/"
+  "Default directory (relative to project root) containing Org posts.")
 
-(defcustom iduh-org-ssg-templates-directory "templates/"
-  "Directory containing HTML templates."
-  :type 'string
-  :group 'iduh-org-mode-ssg)
+(defconst iduh-org-ssg--default-css-path "css/style.css"
+  "Default CSS path relative to the output directory.")
 
-(defcustom iduh-org-ssg-css-path "css/style.css"
-  "Path to CSS file relative to the output directory."
-  :type 'string
-  :group 'iduh-org-mode-ssg)
-
-(defcustom iduh-org-ssg-base-template nil
-  "Path to base HTML template file, or nil to use built-in default."
-  :type '(choice (const nil) string)
-  :group 'iduh-org-mode-ssg)
-
-(defcustom iduh-org-ssg-header-template nil
-  "Path to header HTML template file, or nil to disable."
-  :type '(choice (const nil) string)
-  :group 'iduh-org-mode-ssg)
-
-(defcustom iduh-org-ssg-footer-template nil
-  "Path to footer HTML template file, or nil to disable."
-  :type '(choice (const nil) string)
-  :group 'iduh-org-mode-ssg)
-
-(defcustom iduh-org-ssg-logo-path "asset/site-logo.svg"
-  "Path to the site logo relative to the output directory."
-  :type 'string
-  :group 'iduh-org-mode-ssg)
+(defconst iduh-org-ssg--default-logo-path "asset/site-logo.svg"
+  "Default logo path relative to the output directory.")
 
 ;;; ============================================================================
 ;;; Error Handling
@@ -116,6 +98,46 @@
 
 (defvar iduh-org-ssg--current-post-slug nil
   "Slug of the post currently being processed.")
+
+;; Internal, derived paths for a given run (set by build/generate entrypoints).
+(defvar iduh-org-ssg--templates-dir nil
+  "Absolute path to the templates directory for the current run.")
+
+(defvar iduh-org-ssg--static-dir nil
+  "Absolute path to the static directory for the current run.")
+
+(defun iduh-org-ssg--resolve-layout (project-root &optional skeleton)
+  "Resolve skeleton-derived layout given PROJECT-ROOT and optional SKELETON.
+
+SKELETON may be absolute or relative to PROJECT-ROOT.
+Returns a plist with :skeleton-root, :templates-dir, :static-dir."
+  (let* ((skeleton-root (expand-file-name (or skeleton iduh-org-ssg-skeleton-directory) project-root))
+         (templates-dir (expand-file-name "templates/" skeleton-root))
+         (static-dir (expand-file-name "static/" skeleton-root)))
+    (list :skeleton-root skeleton-root
+          :templates-dir templates-dir
+          :static-dir static-dir)))
+
+;;; ============================================================================
+;;; Path resolution helpers
+;;; ============================================================================
+
+(defun iduh-org-ssg--resolve-skeleton-root (project-root &optional skeleton)
+  "Resolve skeleton root directory given PROJECT-ROOT and optional SKELETON.
+
+Returns an absolute directory name, or nil when no skeleton is configured."
+  (let ((skel (or skeleton iduh-org-ssg-skeleton-directory)))
+    (when (and skel (stringp skel) (not (string-empty-p skel)))
+      (expand-file-name skel project-root))))
+
+(defun iduh-org-ssg--resolve-skeleton-subdir (project-root subdir &optional skeleton)
+  "Resolve SUBDIR within the skeleton for PROJECT-ROOT.
+
+SUBDIR should be a relative path like \"templates/\" or \"static/\".
+Returns an absolute directory path or nil if skeleton is not configured."
+  (let ((root (iduh-org-ssg--resolve-skeleton-root project-root skeleton)))
+    (when root
+      (expand-file-name subdir root))))
 
 (defvar iduh-org-ssg--image-extensions
   '("jpg" "jpeg" "png" "gif" "svg" "webp" "bmp" "tiff")
@@ -414,12 +436,13 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
          (replacements (list :title (string-trim (iduh-org-mode-ssg--render-ast title))
                              :date (iduh-org-mode-ssg--escape-html date)
                              :author author
-                             :logo_path iduh-org-ssg-logo-path
+                             :logo_path iduh-org-ssg--default-logo-path
                              :year (format-time-string "%Y")))
          (processed-header (iduh-org-mode-ssg--process-template header-template replacements))
          (processed-footer (iduh-org-mode-ssg--process-template footer-template replacements))
-         (base-template-str (or (iduh-org-mode-ssg--load-template iduh-org-ssg-base-template)
-                                (iduh-org-mode-ssg--load-template (expand-file-name "base.html" iduh-org-ssg-templates-directory))
+         (base-template-str (or (and iduh-org-ssg--templates-dir
+                                     (iduh-org-mode-ssg--load-template
+                                      (expand-file-name "base.html" iduh-org-ssg--templates-dir)))
                                 iduh--default-base-template))
          
          (meta (concat (when date
@@ -565,15 +588,21 @@ CSS-PATH is the path to the stylesheet (relative to the output HTML)."
   (unless (file-exists-p input-file)
     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-error "Input file does not exist: %s" input-file))
   
-  (let* ((iduh-org-ssg--current-input-file input-file)
+  (let* ((layout (iduh-org-ssg--resolve-layout default-directory))
+         (iduh-org-ssg--templates-dir (plist-get layout :templates-dir))
+         (iduh-org-ssg--current-input-file input-file)
          (iduh-org-ssg--current-output-dir (file-name-directory output-file))
          (doc (iduh-org-mode-ssg--parse-file input-file))
          (iduh-org-ssg--current-post-slug (iduh-org-ssg--slugify (or (plist-get doc :title) 
                                                                     (file-name-base input-file))))
-     (header-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template)
-                          (iduh-org-mode-ssg--load-template (expand-file-name "header.html" iduh-org-ssg-templates-directory))))
-     (footer-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template)
-                          (iduh-org-mode-ssg--load-template (expand-file-name "footer.html" iduh-org-ssg-templates-directory))))
+         (_ (when (fboundp 'iduh-org-ssg-verify-skeleton)
+              (iduh-org-ssg-verify-skeleton (plist-get layout :skeleton-root))))
+     (header-template (and iduh-org-ssg--templates-dir
+                           (iduh-org-mode-ssg--load-template
+                            (expand-file-name "header.html" iduh-org-ssg--templates-dir))))
+     (footer-template (and iduh-org-ssg--templates-dir
+                           (iduh-org-mode-ssg--load-template
+                            (expand-file-name "footer.html" iduh-org-ssg--templates-dir))))
      (html (iduh-org-mode-ssg--generate-html doc css-path header-template footer-template)))
     ;; Validate required fields
     (unless (plist-get doc :date)
@@ -586,16 +615,18 @@ CSS-PATH is the path to the stylesheet (relative to the output HTML)."
 
 ;;;###autoload
 ;;;###autoload
-(cl-defun iduh-org-ssg-generate-file (input-file output-dir &key css header footer base-template lang fonts-url templates)
+(cl-defun iduh-org-ssg-generate-file (input-file output-dir &key skeleton lang fonts-url)
   "Generate HTML from INPUT-FILE into OUTPUT-DIR.
 The output filename is derived from the org file's #+TITLE.
-Keyword arguments can override global configuration variables.
 Returns the path to the generated HTML file."
   (interactive
    (list
-    (read-file-name "Input Org file: " iduh-org-ssg-posts-directory nil t nil
-                    (lambda (f) (or (file-directory-p f)
-                                     (string-suffix-p ".org" f))))
+    (let ((posts-root (expand-file-name iduh-org-ssg--default-posts-directory default-directory)))
+      (read-file-name "Input Org file: "
+                      (if (file-directory-p posts-root) posts-root default-directory)
+                      nil t nil
+                      (lambda (f) (or (file-directory-p f)
+                                      (string-suffix-p ".org" f)))))
     (read-directory-name "Output directory: " iduh-org-ssg-output-directory)))
   
   (unless (file-exists-p input-file)
@@ -605,13 +636,13 @@ Returns the path to the generated HTML file."
   (unless (file-directory-p output-dir)
     (make-directory output-dir t))
   
-  (let* ((iduh-org-ssg-css-path (or css iduh-org-ssg-css-path))
-         (iduh-org-ssg-header-template (or header iduh-org-ssg-header-template))
-         (iduh-org-ssg-footer-template (or footer iduh-org-ssg-footer-template))
-         (iduh-org-ssg-base-template (or base-template iduh-org-ssg-base-template))
-         (iduh-org-mode-ssg-default-lang (or lang iduh-org-mode-ssg-default-lang))
+  (let* ((iduh-org-mode-ssg-default-lang (or lang iduh-org-mode-ssg-default-lang))
          (iduh-org-mode-ssg-google-fonts-url (or fonts-url iduh-org-mode-ssg-google-fonts-url))
-         (iduh-org-ssg-templates-directory (or templates iduh-org-ssg-templates-directory))
+         (project-root default-directory)
+         (layout (iduh-org-ssg--resolve-layout project-root skeleton))
+         (iduh-org-ssg--templates-dir (plist-get layout :templates-dir))
+         (_ (when (fboundp 'iduh-org-ssg-verify-skeleton)
+              (iduh-org-ssg-verify-skeleton (plist-get layout :skeleton-root))))
          (iduh-org-ssg--current-input-file input-file)
          (iduh-org-ssg--current-output-dir output-dir)
          (doc (iduh-org-mode-ssg--parse-file input-file))
@@ -623,11 +654,13 @@ Returns the path to the generated HTML file."
                               (concat iduh-org-ssg--current-post-slug ".html")
                             (concat (file-name-base input-file) ".html")))
          (output-file (expand-file-name output-filename output-dir))
-         (header-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-header-template)
-                              (iduh-org-mode-ssg--load-template (expand-file-name "header.html" iduh-org-ssg-templates-directory))))
-         (footer-template (or (iduh-org-mode-ssg--load-template iduh-org-ssg-footer-template)
-                              (iduh-org-mode-ssg--load-template (expand-file-name "footer.html" iduh-org-ssg-templates-directory))))
-         (html (iduh-org-mode-ssg--generate-html doc iduh-org-ssg-css-path header-template footer-template)))
+         (header-template (and iduh-org-ssg--templates-dir
+                               (iduh-org-mode-ssg--load-template
+                                (expand-file-name "header.html" iduh-org-ssg--templates-dir))))
+         (footer-template (and iduh-org-ssg--templates-dir
+                               (iduh-org-mode-ssg--load-template
+                                (expand-file-name "footer.html" iduh-org-ssg--templates-dir))))
+         (html (iduh-org-mode-ssg--generate-html doc iduh-org-ssg--default-css-path header-template footer-template)))
     
     ;; Validate required fields
     (unless date
@@ -646,12 +679,7 @@ Returns the path to the generated HTML file."
 Supports keyword arguments to override global configuration:
 :posts        - Source directory for org files
 :output       - Output directory for generated HTML
-:static       - Static assets directory
-:templates    - Templates directory
-:css          - Path to CSS file (relative to output)
-:header       - Header template path
-:footer       - Footer template path
-:base-template - Base HTML template path
+:skeleton     - Skeleton directory (templates + static assets)
 :base         - Project base directory (defaults to current directory)
 :lang         - HTML language attribute
 :fonts-url    - Google Fonts URL
@@ -670,34 +698,29 @@ This function:
                      args))
          (posts (plist-get all-args :posts))
          (output (plist-get all-args :output))
-         (static (plist-get all-args :static))
-         (templates (plist-get all-args :templates))
-         (css (plist-get all-args :css))
-         (header (plist-get all-args :header))
-         (footer (plist-get all-args :footer))
-         (base-template (plist-get all-args :base-template))
+         (skeleton (plist-get all-args :skeleton))
          (base (plist-get all-args :base))
          (lang (plist-get all-args :lang))
          (fonts-url (plist-get all-args :fonts-url))
          
-         ;; Local overrides for global variables
-         (iduh-org-ssg-posts-directory (or posts iduh-org-ssg-posts-directory))
-         (iduh-org-ssg-output-directory (or output iduh-org-ssg-output-directory))
-         (iduh-org-ssg-static-directory (or static iduh-org-ssg-static-directory))
-         (iduh-org-ssg-templates-directory (or templates iduh-org-ssg-templates-directory))
-         (iduh-org-ssg-css-path (or css iduh-org-ssg-css-path))
-         (iduh-org-ssg-header-template (or header iduh-org-ssg-header-template))
-         (iduh-org-ssg-footer-template (or footer iduh-org-ssg-footer-template))
-         (iduh-org-ssg-base-template (or base-template iduh-org-ssg-base-template))
          (iduh-org-mode-ssg-default-lang (or lang iduh-org-mode-ssg-default-lang))
          (iduh-org-mode-ssg-google-fonts-url (or fonts-url iduh-org-mode-ssg-google-fonts-url))
          
          (project-root (expand-file-name (or base default-directory)))
          (default-directory project-root)
+
+         (posts-rel (or posts iduh-org-ssg--default-posts-directory))
+         (output-rel (or output iduh-org-ssg-output-directory))
+         (layout (iduh-org-ssg--resolve-layout project-root skeleton))
+         (skeleton-root (plist-get layout :skeleton-root))
+         (templates-dir (plist-get layout :templates-dir))
+         (static-dir (plist-get layout :static-dir))
+         (_ (when (fboundp 'iduh-org-ssg-verify-skeleton)
+              (iduh-org-ssg-verify-skeleton skeleton-root)))
          
-         (posts-dir (expand-file-name iduh-org-ssg-posts-directory))
-         (output-dir (expand-file-name iduh-org-ssg-output-directory))
-         (static-dir (expand-file-name iduh-org-ssg-static-directory))
+         (posts-dir (expand-file-name posts-rel project-root))
+         (output-dir (expand-file-name output-rel project-root))
+         (iduh-org-ssg--templates-dir templates-dir)
          (generated-files '()))
     
     ;; Validate posts directory exists
@@ -717,7 +740,7 @@ This function:
     ;; Process each org file
     (dolist (org-file (directory-files posts-dir t "\\.org$"))
       (condition-case err
-          (let ((generated (iduh-org-ssg-generate-file org-file output-dir)))
+          (let ((generated (iduh-org-ssg-generate-file org-file output-dir :skeleton skeleton-root)))
             (setq generated-files (cons generated generated-files)))
         (error
          (message "Error processing %s: %s" org-file (error-message-string err)))))
@@ -760,34 +783,29 @@ Supports keyword arguments or a single string as the project base directory."
 
 ;;;###autoload
 ;;;###autoload
-(cl-defun iduh-org-mode-ssg-preview (input-file &key css)
+(cl-defun iduh-org-mode-ssg-preview (input-file &key skeleton)
   "Generate and preview HTML from INPUT-FILE in browser.
-CSS can be provided to override iduh-org-ssg-css-path."
+
+Uses `iduh-org-ssg-skeleton-directory' (or SKELETON when provided) for
+templates/static assets."
   (interactive
    (list (read-file-name "Input Org file: " nil nil t nil
                          (lambda (f) (or (file-directory-p f)
                                           (string-suffix-p ".org" f))))))
-  (let* ((css-rel-path (or css iduh-org-ssg-css-path))
+  (let* ((layout (iduh-org-ssg--resolve-layout default-directory skeleton))
+         (skeleton-root (plist-get layout :skeleton-root))
+         (iduh-org-ssg--templates-dir (plist-get layout :templates-dir))
+         (static-dir (plist-get layout :static-dir))
+         (_ (when (fboundp 'iduh-org-ssg-verify-skeleton)
+              (iduh-org-ssg-verify-skeleton skeleton-root)))
          (temp-html (make-temp-file "iduh-org-mode-ssg-preview-" nil ".html"))
-         (temp-dir (file-name-directory temp-html))
-         (temp-css (expand-file-name css-rel-path temp-dir))
-         (css-source (expand-file-name css-rel-path
-                                        (file-name-directory
-                                         (or load-file-name buffer-file-name)))))
-    ;; Ensure temp CSS directory exists
-    (unless (file-directory-p (file-name-directory temp-css))
-      (make-directory (file-name-directory temp-css) t))
-    ;; Copy CSS to temp location if it exists
-    (when (file-exists-p css-source)
-      (copy-file css-source temp-css t))
-    ;; Generate HTML
-    (iduh-org-ssg-generate-file input-file temp-dir :css css-rel-path)
-    ;; Open in browser
-    (let ((generated-file (expand-file-name (concat (iduh-org-ssg--slugify (file-name-base input-file)) ".html") temp-dir)))
-      (if (file-exists-p generated-file)
-          (browse-url-of-file generated-file)
-        ;; Fallback if slugify failed or misaligned
-        (browse-url-of-file temp-html)))))
+         (temp-dir (file-name-directory temp-html)))
+    ;; Copy skeleton static assets into temp output.
+    (when (file-directory-p static-dir)
+      (iduh-org-ssg--copy-directory-contents static-dir temp-dir))
+    ;; Generate HTML and open in browser.
+    (let ((generated-file (iduh-org-ssg-generate-file input-file temp-dir :skeleton skeleton-root)))
+      (browse-url-of-file generated-file))))
 
 (provide 'iduh-org-mode-ssg)
 

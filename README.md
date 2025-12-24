@@ -27,17 +27,17 @@ In experimental stage, and created for personal use. mostly vibe coded.
 
 ## Configuration
 
-### Basic Configuration Variables
+### Required Configuration Variables
 
-| Variable                           | Default     | Description                           |
-|------------------------------------|-------------|---------------------------------------|
-| `iduh-org-ssg-posts-directory`     | `"posts/"`  | Source directory for org files        |
-| `iduh-org-ssg-output-directory`    | `"public/"` | Output directory for generated HTML   |
-| `iduh-org-ssg-static-directory`    | `"static/"` | Static assets directory               |
-| `iduh-org-ssg-templates-directory` | `"templates/"` | Optional HTML templates            |
-| `iduh-org-ssg-css-path`            | `"css/style.css"` | CSS path relative to output     |
-| `iduh-org-ssg-header-template`     | `nil`       | Path to header HTML template          |
-| `iduh-org-ssg-footer-template`     | `nil`       | Path to footer HTML template          |
+You typically only set **two variables**:
+
+| Variable                        | Default       | Description |
+|---------------------------------|---------------|-------------|
+| `iduh-org-ssg-skeleton-directory` | `"skeleton/"` | Directory containing `templates/` + `static/` |
+| `iduh-org-ssg-output-directory`   | `"public/"`   | Output directory for generated HTML |
+
+Posts are read from `posts/` by default. If your notes live elsewhere, pass `:posts`
+to `iduh-org-ssg-build-site`.
 
 ### Example Configuration (config.el)
 
@@ -45,17 +45,25 @@ In experimental stage, and created for personal use. mostly vibe coded.
 ;; Load the SSG package
 (require 'iduh-org-mode-ssg)
 
-;; Configure directories
-(setq iduh-org-ssg-posts-directory "~/blog/content/")
+;; Configure the skeleton + output
+(setq iduh-org-ssg-skeleton-directory "~/blog/skeleton/")
 (setq iduh-org-ssg-output-directory "~/blog/public/")
-(setq iduh-org-ssg-static-directory "~/blog/static/")
-
-;; Optional: Enable templates
-(setq iduh-org-ssg-header-template "~/blog/templates/header.html")
-(setq iduh-org-ssg-footer-template "~/blog/templates/footer.html")
 
 ;; Generate the site
-(iduh-org-ssg-build-site)
+(iduh-org-ssg-build-site :base "~/blog/")
+
+;; If your notes are not in ~/blog/posts/, provide :posts:
+;; (iduh-org-ssg-build-site :base "~/blog/" :posts "content/")
+```
+
+### Skeleton Verification
+
+You can validate a skeleton directory before building:
+
+```elisp
+(iduh-org-ssg-verify-skeleton "~/blog/skeleton/")
+;; or interactively:
+;; M-x iduh-org-ssg-verify-skeleton
 ```
 
 ---
@@ -77,28 +85,30 @@ In experimental stage, and created for personal use. mostly vibe coded.
 
 ```
 your-project/
-├── posts/                          # Source org files (configurable)
+├── posts/                          # Source org files (notes)
 │   ├── my-first-post.org
 │   ├── another-article.org
 │   └── assets/                     # Post-specific images/media
 │       └── example-image.png
 │
-├── templates/                      # Optional HTML templates
-│   ├── header.html                 # Site header/navigation
-│   └── footer.html                 # Site footer
-│
-├── static/                         # Static assets
-│   ├── css/
-│   │   └── style.css              # Main stylesheet
-│   └── images/                     # Site-wide images (logo, favicon, etc.)
+├── skeleton/                       # Site skeleton (templates + static)
+│   ├── templates/
+│   │   ├── base.html               # Base HTML wrapper
+│   │   ├── header.html             # Site header/navigation
+│   │   └── footer.html             # Site footer
+│   └── static/
+│       ├── css/
+│       │   └── style.css           # Main stylesheet
+│       └── asset/
+│           └── site-logo.svg       # Used by the default header template
 │
 ├── public/                         # Generated output (configurable)
 │   ├── my-first-post.html         # Generated from posts/my-first-post.org
 │   ├── another-article.html       # Generated from posts/another-article.org
 │   ├── css/
-│   │   └── style.css              # Copied from static/
-│   └── assets/
-│       └── example-image.png      # Copied from posts/assets/
+│   │   └── style.css              # Copied from skeleton/static/
+│   └── asset/
+│       └── site-logo.svg          # Copied from skeleton/static/
 │
 └── config.el                       # Site configuration (optional)
 ```
@@ -109,9 +119,10 @@ your-project/
 
 ## Template System
 
-Templates are optional HTML files that wrap around your generated content.
+Templates are HTML files in your skeleton (`skeleton/templates/`) that wrap around
+your generated content.
 
-### Header Template (templates/header.html)
+### Header Template (`skeleton/templates/header.html`)
 
 ```html
 <header class="site-header">
@@ -125,7 +136,7 @@ Templates are optional HTML files that wrap around your generated content.
 </header>
 ```
 
-### Footer Template (templates/footer.html)
+### Footer Template (`skeleton/templates/footer.html`)
 
 ```html
 <footer class="site-footer">
@@ -191,16 +202,20 @@ Each org file generates an HTML file with this structure:
 ```elisp
 ;; Generate a single org file to HTML
 (iduh-org-ssg-generate-file "posts/my-post.org" "public/")
+
+;; If you want to point at a skeleton explicitly:
+;; (iduh-org-ssg-generate-file "posts/my-post.org" "public/" :skeleton "~/blog/skeleton/")
 ```
 
 ### Batch Site Generation
 
 ```elisp
 ;; Generate all org files in posts/ to public/
-(iduh-org-ssg-build-site)
+(iduh-org-ssg-build-site :base "~/your-project/")
 
 ;; Or with custom directories
 (iduh-org-ssg-build-site 
+  :base "~/your-project/"
   :posts "content/"
   :output "dist/")
 ```

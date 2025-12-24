@@ -15,7 +15,7 @@ all: build
 .PHONY: build
 build:
 	@echo "🚀 Building site..."
-	@$(EMACS) --batch -l $(LIB) --eval '(setq iduh-org-ssg-posts-directory "$(POSTS_DIR)")' --eval '(iduh-org-ssg-build-site)'
+	@$(EMACS) --batch -l $(LIB) --eval '(iduh-org-ssg-build-site :posts "$(POSTS_DIR)" :output "$(PUBLIC_DIR)")'
 	@echo "✅ Build complete! Files are in the '$(PUBLIC_DIR)' directory."
 
 # Clean the output directory
