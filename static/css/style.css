@@ -267,6 +267,70 @@ p:last-child {
   margin-bottom: 0;
 }
 
+/* === LISTS === */
+ul,
+ol {
+  margin-bottom: var(--space-lg);
+  padding-left: var(--space-xl);
+  color: var(--color-text);
+}
+
+li {
+  margin-bottom: var(--space-xs);
+  line-height: var(--line-height);
+}
+
+li::marker {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+ul {
+  list-style-type: square;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+/* Nested lists */
+ul ul,
+ul ol,
+ol ul,
+ol ol {
+  margin-top: var(--space-xs);
+  margin-bottom: 0;
+  padding-left: var(--space-lg);
+}
+
+li:last-child {
+  margin-bottom: 0;
+}
+
+/* === DESCRIPTION LISTS === */
+dl {
+  margin-bottom: var(--space-lg);
+  border: var(--bevel-inset);
+  border-color: var(--border-inset);
+  background-color: var(--color-bg-secondary);
+  padding: var(--space-md);
+}
+
+dt {
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-top: var(--space-sm);
+}
+
+dt:first-child {
+  margin-top: 0;
+}
+
+dd {
+  margin-left: var(--space-xl);
+  margin-bottom: var(--space-sm);
+}
+
 /* === INLINE TEXT FORMATTING === */
 .bold {
   font-weight: 700;
