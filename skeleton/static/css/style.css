@@ -60,6 +60,11 @@
   --line-height: 1.5;
   --line-height-tight: 1.2;
 
+  /* --- Border Radius --- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+
   /* --- 3D Bevel Effects --- */
   --bevel-outset: 2px solid;
   --border-outset: var(--color-border-light) var(--color-border-dark) var(--color-border-dark) var(--color-border-light);
@@ -481,6 +486,48 @@ a:hover {
 .button-link:active {
   border: var(--bevel-inset);
   border-color: var(--border-inset);
+}
+
+
+/* === POST ARCHIVE === */
+.archive-month {
+  font-family: var(--font-title);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--color-border-dark);
+}
+
+.archive-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.archive-list li {
+  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: baseline;
+}
+
+.archive-list time {
+  font-family: var(--font-code);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  min-width: 120px;
+  margin-right: var(--space-md);
+}
+
+.archive-list a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.archive-list a:hover {
+  text-decoration: underline;
+  color: var(--color-accent-hover);
 }
 
 /* === RESPONSIVE ADJUSTMENTS === */

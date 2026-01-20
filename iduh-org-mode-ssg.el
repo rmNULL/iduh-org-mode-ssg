@@ -235,6 +235,13 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
          (date (iduh-org-mode-ssg--get-keyword ast "DATE"))
          (author (iduh-org-mode-ssg--get-keyword ast "AUTHOR"))
          (description (iduh-org-mode-ssg--get-keyword ast "DESCRIPTION"))
+         ;; Extract top-level preamble (content before first headline)
+         (preamble-section (car (org-element-map ast 'section #'identity nil nil '(headline))))
+         (_ (message "DEBUG: Preamble section found: %s" (if preamble-section "yes" "no")))
+         (preamble (when preamble-section
+                     (let ((elems (org-element-contents preamble-section)))
+                       (message "DEBUG: Preamble elements: %d" (length elems))
+                       (iduh-org-mode-ssg--parse-elements elems))))
          ;; Extract only level 1 headlines
          (sections (org-element-map ast 'headline
                      (lambda (headline)
@@ -256,21 +263,23 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
           :date date
           :author author
           :description description
+          :preamble preamble
           :sections sections)))
 
-(defun iduh-org-mode-ssg--parse-section-content (headline)
-  "Parse the content of a HEADLINE element and return a list of content items."
-  (let* ((section (org-element-map headline 'section #'identity nil t))
-         (elements (and section (org-element-contents section)))
-         (items '()))
+(defun iduh-org-mode-ssg--parse-elements (elements)
+  "Parse a list of ELEMENTS and return a list of content items."
+  (let ((items '()))
     (dolist (element elements)
       (let ((type (org-element-type element)))
+        (message "DEBUG: Parsing element type: %s" type)
         (cond
          ;; Paragraph (Check for standalone image)
          ((eq type 'paragraph)
+          (message "DEBUG: Handling paragraph")
           (let* ((contents (org-element-contents element))
                  (non-blank-contents (cl-remove-if (lambda (c) (and (stringp c) (string-blank-p c))) contents))
                  (first-child (car non-blank-contents)))
+            (message "DEBUG: Paragraph contents length: %d" (length contents))
             (if (and (= (length non-blank-contents) 1)
                      (eq (org-element-type first-child) 'link)
                      (string= (org-element-property :type first-child) "file")
@@ -285,7 +294,10 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
                       (push (list :type 'image :src src :alt alt) items)
                     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-image-error
                                               "Image must have alt text: [[%s]]" src)))
-              (push (list :type 'paragraph :content contents) items))))
+              (progn
+                (message "DEBUG: Pushing paragraph. Content length: %d" (length contents))
+                (push (list :type 'paragraph :content contents) items)
+                (message "DEBUG: Items length after push: %d" (length items))))))
          
          ;; Quote block
          ((eq type 'quote-block)
@@ -302,8 +314,23 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
               (when (eq (org-element-type child) 'item)
                 (push (org-element-contents (car (org-element-contents child)))
                       list-items)))
-            (push (list :type 'list :content (nreverse list-items)) items))))))
+            (push (list :type 'list :content (nreverse list-items)) items)))
+         
+         ;; Source Block
+         ((eq type 'src-block)
+          (push (list :type 'src-block
+                      :language (org-element-property :language element)
+                      :value (org-element-property :value element))
+                items)
+          (message "DEBUG: Pushed src-block. Items length: %d" (length items))))))
+    (message "DEBUG: Returning items. Length: %d" (length items))
     (nreverse items)))
+
+(defun iduh-org-mode-ssg--parse-section-content (headline)
+  "Parse the content of a HEADLINE element and return a list of content items."
+  (let* ((section (org-element-map headline 'section #'identity nil t))
+         (elements (and section (org-element-contents section))))
+    (iduh-org-mode-ssg--parse-elements elements)))
 
 ;;; ============================================================================
 ;;; Inline Formatting
@@ -403,6 +430,64 @@ DATE-STRING should be in YYYY-MM-DD format."
       ;; If not in expected format, return as-is with prefix
       (concat "Published on " date-string))))
 
+(defun iduh-org-ssg--parse-date-components (date-string)
+  "Parse DATE-STRING (YYYY-MM-DD) into (year month day).
+Returns list of numbers or nil."
+  (when (and date-string
+             (string-match "^\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)$" date-string))
+    (list (string-to-number (match-string 1 date-string))
+          (string-to-number (match-string 2 date-string))
+          (string-to-number (match-string 3 date-string)))))
+
+(defun iduh-org-ssg--full-month-name (month-num)
+  "Return full month name for MONTH-NUM (1-12)."
+  (nth (1- month-num) '("January" "February" "March" "April" "May" "June"
+                        "July" "August" "September" "October" "November" "December")))
+
+(defun iduh-org-ssg--group-posts-by-month (posts)
+  "Group POSTS by Month Year.
+POSTS is a list of plists (:title :date :path :slug).
+Returns alist: ((year month . posts) ...)."
+  (let ((groups '()))
+    (dolist (post posts)
+      (let* ((date (plist-get post :date))
+             (components (iduh-org-ssg--parse-date-components date)))
+        (when components
+          (let* ((year (nth 0 components))
+                 (month (nth 1 components))
+                 (key (cons year month))
+                 (existing (assoc key groups)))
+            (if existing
+                (setcdr existing (cons post (cdr existing)))
+              (push (list key post) groups))))))
+    ;; Sort groups by date desc
+    (sort groups (lambda (a b)
+                   (let ((ya (caar a)) (ma (cdar a))
+                         (yb (caar b)) (mb (cdar b)))
+                     (if (= ya yb) (> ma mb) (> ya yb)))))))
+
+(defun iduh-org-ssg--generate-posts-html (posts)
+  "Generate HTML content for POSTS list."
+  (let ((grouped (iduh-org-ssg--group-posts-by-month posts))
+        (html ""))
+    (dolist (group grouped)
+      (let* ((year (caar group))
+             (month (cdar group))
+             (month-name (iduh-org-ssg--full-month-name month))
+             (group-posts (cdr group)))
+        (setq html (concat html (format "    <h2 class=\"archive-month\">%s %d</h2>\n    <ul class=\"archive-list\">\n" month-name year)))
+        ;; Sort posts in group by date desc
+        (setq group-posts (sort group-posts (lambda (a b) (string> (plist-get a :date) (plist-get b :date)))))
+        (dolist (post group-posts)
+          (let ((title (plist-get post :title))
+                (date (plist-get post :date))
+                (path (file-name-nondirectory (plist-get post :path))))
+            (setq html (concat html 
+                               (format "      <li><time>%s</time> <a href=\"%s\">%s</a></li>\n" 
+                                       date path (iduh-org-mode-ssg--escape-html title))))))
+        (setq html (concat html "    </ul>\n"))))
+    html))
+
 ;;; ============================================================================
 ;;; Template Processing
 ;;; ============================================================================
@@ -465,7 +550,13 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
                                      (iduh-org-mode-ssg--format-date date)
                                      "</time>")
                            ""))
-         (content (mapconcat #'iduh-org-mode-ssg--generate-section sections "\n"))
+         (preamble (plist-get doc :preamble))
+         (_ (message "DEBUG: Generating HTML. Preamble items: %d" (if preamble (length preamble) 0)))
+         (rendered-preamble (if preamble
+                                (mapconcat #'iduh-org-mode-ssg--generate-content preamble "")
+                              ""))
+         (section-content (mapconcat #'iduh-org-mode-ssg--generate-section sections "\n"))
+         (content (concat rendered-preamble section-content))
          
          (all-replacements (append replacements
                                    (list :lang iduh-org-mode-ssg-default-lang
@@ -555,6 +646,12 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
                     (concat "        <li>" (string-trim (iduh-org-mode-ssg--render-ast li)) "</li>\n"))
                   items "")
                  "      </ul>\n")))
+      ('src-block
+       (let ((lang (or (plist-get item :language) "text"))
+             (code (plist-get item :value)))
+         (concat "      <pre><code class=\"language-" (iduh-org-mode-ssg--escape-html lang) "\">"
+                 (iduh-org-mode-ssg--escape-html code)
+                 "</code></pre>\n")))
       (_ ""))))
 
 
@@ -669,14 +766,10 @@ Returns the path to the generated HTML file."
          (html (iduh-org-mode-ssg--generate-html doc iduh-org-ssg--default-css-path header-template footer-template)))
     
     ;; Validate required fields
-    (unless date
-      (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-parse-error
-                      "Missing #+DATE field in %s. This field is mandatory." input-file))
-    
     (with-temp-file output-file
       (insert html))
     (message "Generated: %s" output-file)
-    output-file))
+    (list :path output-file :title title :date date :slug iduh-org-ssg--current-post-slug)))
 
 ;;;###autoload
 (cl-defun iduh-org-ssg-build-site (&key skeleton output posts lang fonts-url)
@@ -732,9 +825,49 @@ This function:
     (dolist (org-file (directory-files posts-dir t "\\.org$"))
       (condition-case err
           (let ((generated (iduh-org-ssg-generate-file org-file output-dir :skeleton skeleton-root)))
-            (setq generated-files (cons generated generated-files)))
+            (setq generated-files (cons (plist-get generated :path) generated-files))
+            (setq generated-files (cons generated generated-files))) ; Helper storage, will clean up later
         (error
          (message "Error processing %s: %s" org-file (error-message-string err)))))
+
+    ;; Separate paths and metadata
+    (let ((posts-data (cl-remove-if-not #'listp generated-files))
+          (final-files (cl-remove-if-not #'stringp generated-files)))
+      
+      ;; Generate posts.html
+      (let* ((posts-content (iduh-org-ssg--generate-posts-html posts-data))
+             (base-template (or (and templates-dir 
+                                     (iduh-org-mode-ssg--load-template (expand-file-name "base.html" templates-dir)))
+                                iduh--default-base-template))
+             (header-template (and templates-dir (iduh-org-mode-ssg--load-template (expand-file-name "header.html" templates-dir))))
+             (footer-template (and templates-dir (iduh-org-mode-ssg--load-template (expand-file-name "footer.html" templates-dir))))
+             
+             (replacements (list :title "Posts"
+                                 :date nil
+                                 :author ""
+                                 :logo_path iduh-org-ssg--default-logo-path
+                                 :year (format-time-string "%Y")))
+             (processed-header (iduh-org-mode-ssg--process-template header-template replacements))
+             (processed-footer (iduh-org-mode-ssg--process-template footer-template replacements))
+             
+             (all-replacements (append replacements
+                                       (list :lang iduh-org-mode-ssg-default-lang
+                                             :meta ""
+                                             :google_fonts_url iduh-org-mode-ssg-google-fonts-url
+                                             :css_path iduh-org-ssg--default-css-path
+                                             :header (or (and processed-header (string-trim processed-header)) "")
+                                             :formatted_title "Archive"
+                                             :formatted_subtitle ""
+                                             :formatted_date ""
+                                             :content posts-content
+                                             :footer (or (and processed-footer (string-trim processed-footer)) ""))))
+             (posts-html (iduh-org-mode-ssg--process-template base-template all-replacements))
+             (posts-file (expand-file-name "posts.html" output-dir)))
+        
+        (with-temp-file posts-file
+          (insert posts-html))
+        (message "Generated: %s" posts-file)
+        (setq generated-files (cons posts-file final-files))))
     
     ;; Report results
     (let ((count (length generated-files)))
@@ -795,8 +928,8 @@ templates/static assets."
     (when (file-directory-p static-dir)
       (iduh-org-ssg--copy-directory-contents static-dir temp-dir))
     ;; Generate HTML and open in browser.
-    (let ((generated-file (iduh-org-ssg-generate-file input-file temp-dir :skeleton skeleton-root)))
-      (browse-url-of-file generated-file))))
+    (let ((generated (iduh-org-ssg-generate-file input-file temp-dir :skeleton skeleton-root)))
+      (browse-url-of-file (plist-get generated :path)))))
 
 (provide 'iduh-org-mode-ssg)
 
