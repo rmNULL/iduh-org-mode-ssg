@@ -237,11 +237,8 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
          (description (iduh-org-mode-ssg--get-keyword ast "DESCRIPTION"))
          ;; Extract top-level preamble (content before first headline)
          (preamble-section (car (org-element-map ast 'section #'identity nil nil '(headline))))
-         (_ (message "DEBUG: Preamble section found: %s" (if preamble-section "yes" "no")))
          (preamble (when preamble-section
-                     (let ((elems (org-element-contents preamble-section)))
-                       (message "DEBUG: Preamble elements: %d" (length elems))
-                       (iduh-org-mode-ssg--parse-elements elems))))
+                     (iduh-org-mode-ssg--parse-elements (org-element-contents preamble-section))))
          ;; Extract only level 1 headlines
          (sections (org-element-map ast 'headline
                      (lambda (headline)
@@ -271,15 +268,12 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
   (let ((items '()))
     (dolist (element elements)
       (let ((type (org-element-type element)))
-        (message "DEBUG: Parsing element type: %s" type)
         (cond
          ;; Paragraph (Check for standalone image)
          ((eq type 'paragraph)
-          (message "DEBUG: Handling paragraph")
           (let* ((contents (org-element-contents element))
                  (non-blank-contents (cl-remove-if (lambda (c) (and (stringp c) (string-blank-p c))) contents))
                  (first-child (car non-blank-contents)))
-            (message "DEBUG: Paragraph contents length: %d" (length contents))
             (if (and (= (length non-blank-contents) 1)
                      (eq (org-element-type first-child) 'link)
                      (string= (org-element-property :type first-child) "file")
@@ -294,10 +288,7 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
                       (push (list :type 'image :src src :alt alt) items)
                     (iduh-org-mode-ssg--error 'iduh-org-mode-ssg-image-error
                                               "Image must have alt text: [[%s]]" src)))
-              (progn
-                (message "DEBUG: Pushing paragraph. Content length: %d" (length contents))
-                (push (list :type 'paragraph :content contents) items)
-                (message "DEBUG: Items length after push: %d" (length items))))))
+              (push (list :type 'paragraph :content contents) items))))
          
          ;; Quote block
          ((eq type 'quote-block)
@@ -321,9 +312,7 @@ Returns a plist with :title, :subtitle, :date, :author, :description, and :secti
           (push (list :type 'src-block
                       :language (org-element-property :language element)
                       :value (org-element-property :value element))
-                items)
-          (message "DEBUG: Pushed src-block. Items length: %d" (length items))))))
-    (message "DEBUG: Returning items. Length: %d" (length items))
+                items)))))
     (nreverse items)))
 
 (defun iduh-org-mode-ssg--parse-section-content (headline)
@@ -551,7 +540,6 @@ Optional HEADER-TEMPLATE and FOOTER-TEMPLATE are pre-loaded template strings."
                                      "</time>")
                            ""))
          (preamble (plist-get doc :preamble))
-         (_ (message "DEBUG: Generating HTML. Preamble items: %d" (if preamble (length preamble) 0)))
          (rendered-preamble (if preamble
                                 (mapconcat #'iduh-org-mode-ssg--generate-content preamble "")
                               ""))
