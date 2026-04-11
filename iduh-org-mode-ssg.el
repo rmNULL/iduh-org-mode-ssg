@@ -420,13 +420,29 @@ DATE-STRING should be in YYYY-MM-DD format."
       (concat "Published on " date-string))))
 
 (defun iduh-org-ssg--parse-date-components (date-string)
-  "Parse DATE-STRING (YYYY-MM-DD) into (year month day).
+  "Parse DATE-STRING into (year month day).
+Supports both YYYY-MM-DD and Org-mode date formats (e.g., \"Tue, 20 Jan 2026, 23:38\").
 Returns list of numbers or nil."
-  (when (and date-string
-             (string-match "^\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)$" date-string))
-    (list (string-to-number (match-string 1 date-string))
-          (string-to-number (match-string 2 date-string))
-          (string-to-number (match-string 3 date-string)))))
+  (when date-string
+    (let ((parsed-time
+           (cond
+            ;; Try YYYY-MM-DD format first
+            ((string-match "^\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)$" date-string)
+             (encode-time 0 0 0
+                          (string-to-number (match-string 3 date-string))
+                          (string-to-number (match-string 2 date-string))
+                          (string-to-number (match-string 1 date-string))))
+            ;; Try Org-mode date format using org-read-date
+            ((fboundp 'org-read-date)
+             (org-read-date nil t date-string))
+            ;; Try parse-time-string as fallback
+            (t (ignore-errors (parse-time-string date-string))))))
+      (when (and parsed-time (listp parsed-time))
+        (let ((decoded (decode-time parsed-time)))
+          ;; decode-time returns (SEC MIN HOUR DAY MONTH YEAR DOW DST ZONE)
+          (list (nth 5 decoded)
+                (nth 4 decoded)
+                (nth 3 decoded)))))))
 
 (defun iduh-org-ssg--full-month-name (month-num)
   "Return full month name for MONTH-NUM (1-12)."
